@@ -84,7 +84,6 @@ function proxyRequest(string $path, string $method, string $body, array $extraHe
 // ── DB helpers ────────────────────────────────────────────────────────────────
 function dbUpsertSession(string $name, string $label, string $status = 'connecting'): void {
     try {
-        // Preferred: insert with dedicated label column (needs migrate_add_label.sql)
         db()->prepare(
             'INSERT INTO whats_app_sessions (name, label, status, created_at, updated_at)
              VALUES (:name, :label, :status, NOW(), NOW())
@@ -94,24 +93,7 @@ function dbUpsertSession(string $name, string $label, string $status = 'connecti
                  updated_at = NOW()'
         )->execute([':name' => $name, ':label' => $label, ':status' => $status]);
     } catch (Exception $e) {
-        // Fallback: label column may not exist yet — insert without it and use session_data JSON
-        try {
-            db()->prepare(
-                'INSERT INTO whats_app_sessions (name, status, created_at, updated_at)
-                 VALUES (:name, :status, NOW(), NOW())
-                 ON DUPLICATE KEY UPDATE
-                     status     = VALUES(status),
-                     updated_at = NOW()'
-            )->execute([':name' => $name, ':status' => $status]);
-            db()->prepare(
-                "UPDATE whats_app_sessions
-                 SET session_data = JSON_SET(COALESCE(session_data,'{}'), '$.label', :label),
-                     updated_at   = NOW()
-                 WHERE name = :name"
-            )->execute([':label' => $label, ':name' => $name]);
-        } catch (Exception $e2) {
-            error_log('[baileys-proxy] dbUpsertSession fallback error: ' . $e2->getMessage());
-        }
+        error_log('[baileys-proxy] dbUpsertSession error: ' . $e->getMessage());
     }
 }
 
@@ -150,20 +132,8 @@ function dbAllSessions(): array {
             'SELECT name, label, phone_number, status FROM whats_app_sessions ORDER BY created_at ASC'
         )->fetchAll();
     } catch (Exception $e) {
-        // Fallback: label column may not exist yet
-        try {
-            $rows = db()->query(
-                'SELECT name, phone_number, status, session_data FROM whats_app_sessions ORDER BY created_at ASC'
-            )->fetchAll();
-            return array_map(function ($r) {
-                $sd = !empty($r['session_data']) ? json_decode($r['session_data'], true) : [];
-                $r['label'] = $sd['label'] ?? null;
-                return $r;
-            }, $rows);
-        } catch (Exception $e2) {
-            error_log('[baileys-proxy] dbAllSessions error: ' . $e2->getMessage());
-            return [];
-        }
+        error_log('[baileys-proxy] dbAllSessions error: ' . $e->getMessage());
+        return [];
     }
 }
 
@@ -263,7 +233,6 @@ if ($method === 'GET' && preg_match('#^/api/session/status/(.+)$#', $path, $m)) 
     $nr = proxyRequest('/api/session/status/' . urlencode($sessionId), 'GET', '');
 
     if ($nr['raw'] !== false && $nr['status'] === 200) {
-        // Node responded OK — parse and sync to DB
         $nd = json_decode($nr['raw'], true);
         if (!empty($nd['status'])) {
             $phone = $nd['phone'] ?? null;
@@ -273,36 +242,27 @@ if ($method === 'GET' && preg_match('#^/api/session/status/(.+)$#', $path, $m)) 
         exit;
     }
 
-    // Node did not return 200 — try DB fallback
-    $dbRow = null;
+    // Node offline — return DB record as fallback
+    $dbError = null;
     try {
-        $stmt = db()->prepare('SELECT * FROM whats_app_sessions WHERE name = :n LIMIT 1');
-        $stmt->execute([':n' => $sessionId]);
-        $dbRow = $stmt->fetch();
+        $row = db()->prepare('SELECT * FROM whats_app_sessions WHERE name = :n LIMIT 1');
+        $row->execute([':n' => $sessionId]);
+        $r = $row->fetch();
+        if ($r) {
+            jsonOut(200, ['status' => strtoupper($r['status']), 'phone' => $r['phone_number']]);
+        }
     } catch (Exception $e) {
-        error_log('[baileys-proxy] status DB lookup error: ' . $e->getMessage());
+        $dbError = $e->getMessage();
     }
 
-    if ($dbRow) {
-        // Return DB data with a source flag so frontend knows Node was unavailable
-        $nodeDown = ($nr['raw'] === false || $nr['status'] === 0);
-        jsonOut(200, [
-            'status'      => strtoupper($dbRow['status']),
-            'phone'       => $dbRow['phone_number'],
-            'source'      => $nodeDown ? 'db_fallback' : 'node_error',
-            'node_status' => $nr['status'],
-        ]);
-    }
-
-    // Session not found anywhere — return clear error
-    $nodeDown = ($nr['raw'] === false || $nr['status'] === 0);
-    jsonOut(404, [
-        'error'       => $nodeDown
-            ? 'Baileys service is unreachable and session not found in database.'
-            : 'Session not found in Baileys (Node returned HTTP ' . $nr['status'] . ').',
-        'node_status' => $nr['status'],
-        'node_error'  => $nr['error'] ?: null,
-    ]);
+    http_response_code($nr['status'] ?: 502);
+    echo $nr['raw'] ?: json_encode([
+        'error'    => 'Baileys offline',
+        'detail'   => $nr['error'] ?: 'Unknown cURL error',
+        'db_error' => $dbError ?: 'Session not found in database',
+        'target'   => BAILEYS_BASE . '/api/session/status/' . $sessionId
+    ], JSON_UNESCAPED_SLASHES);
+    exit;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
