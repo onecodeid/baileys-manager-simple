@@ -8,6 +8,25 @@
     <link href="https://cdn.jsdelivr.net/npm/vuetify@3.5.2/dist/vuetify.min.css" rel="stylesheet">
 </head>
 <body>
+    <!-- Auth guard: redirect to login if not authenticated -->
+    <script>
+    (async () => {
+        try {
+            const res  = await fetch('auth.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'check' })
+            });
+            if (!res.ok) { window.location.href = 'login.html'; return; }
+            const data = await res.json();
+            if (!data.authenticated) { window.location.href = 'login.html'; }
+            else { window.__authUser = data.user; }
+        } catch (_) {
+            window.location.href = 'login.html';
+        }
+    })();
+    </script>
+
     <div id="app"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/vue@3.4.15/dist/vue.global.prod.js"></script>
@@ -200,7 +219,21 @@
       <v-chip color="white" variant="outlined" class="mr-3">
         {{ sessions.length }} / {{ maxSessions }} slots
       </v-chip>
-      <v-btn icon="mdi-refresh" variant="text" color="white" @click="reload" :loading="loading"></v-btn>
+      <v-btn icon="mdi-refresh" variant="text" color="white" @click="reload" :loading="loading" title="Refresh"></v-btn>
+      <v-divider vertical class="mx-1" style="border-color:rgba(255,255,255,.25);"></v-divider>
+      <v-chip color="white" variant="text" class="mx-1 text-caption" prepend-icon="mdi-account-circle">
+        {{ authUser.name }}
+      </v-chip>
+      <v-btn
+        id="btn-logout"
+        variant="outlined"
+        color="white"
+        size="small"
+        prepend-icon="mdi-logout"
+        class="mr-2"
+        :loading="logoutLoading"
+        @click="doLogout"
+      >Logout</v-btn>
     </template>
   </v-app-bar>
 
@@ -379,6 +412,9 @@
             const loading     = computed(() => store.state.globalLoading);
             const snackbar    = computed(() => store.state.snackbar);
 
+            // Auth user info
+            const authUser = ref(window.__authUser || { name: '...', email: '' });
+
             // Add dialog
             const addDialog   = ref(false);
             const newSessionId = ref('');
@@ -388,6 +424,21 @@
             // Delete dialog
             const deleteDialog = ref(false);
             const deleteTarget = ref(null);
+
+            // Logout
+            const logoutLoading = ref(false);
+            const doLogout = async () => {
+                logoutLoading.value = true;
+                try {
+                    await fetch('auth.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'logout' })
+                    });
+                } catch (_) {}
+                store.dispatch('stopAllPolling');
+                window.location.href = 'login.html';
+            };
 
             const openAddDialog = () => {
                 newSessionId.value = '';
@@ -419,6 +470,7 @@
 
             return {
                 sessions, maxSessions, loading, snackbar,
+                authUser, logoutLoading, doLogout,
                 addDialog, newSessionId, newLabel, addLoading, openAddDialog, submitAdd,
                 deleteDialog, deleteTarget, confirmDelete, doDelete,
                 reconnect, reload,
