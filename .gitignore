@@ -1,0 +1,11 @@
+.env
+.env.local
+.env.production
+.env.development
+.env.staging
+s/node_modules/
+s/sessions/
+s/uploads/
+.idea/
+.vscode/
+*.log

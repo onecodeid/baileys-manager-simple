@@ -19,11 +19,7 @@
 define('BAILEYS_BASE',    'http://127.0.0.1:3000');
 define('REQUEST_TIMEOUT', 15);
 
-define('DB_HOST', '127.0.0.1');
-define('DB_PORT', 3306);
-define('DB_NAME', 'baileys_manager');
-define('DB_USER', 'root');
-define('DB_PASS', 'bio!102938');
+require_once __DIR__ . '/db_config.php';
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 header('Content-Type: application/json');
