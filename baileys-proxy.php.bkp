@@ -1,0 +1,97 @@
+<?php
+/**
+ * baileys-proxy.php
+ * Reverse proxy: forwards requests from the browser (on baileys.example.com)
+ * to the Baileys Node.js service running on http://127.0.0.1:3000.
+ *
+ * Place this file in the same public directory as index.html.
+ *
+ * Usage from JS:
+ *   GET  /baileys-proxy.php?path=/api/session/status/{sessionId}
+ *   POST /baileys-proxy.php?path=/api/session/start   (JSON body)
+ */
+
+// ---------------------------------------------------------------------------
+// Config
+// ---------------------------------------------------------------------------
+define('BAILEYS_BASE', 'http://127.0.0.1:3000');
+define('REQUEST_TIMEOUT', 15); // seconds
+
+// ---------------------------------------------------------------------------
+// Security: only allow paths that start with /api/
+// ---------------------------------------------------------------------------
+$path = $_GET['path'] ?? '';
+
+if (!preg_match('#^/api/#', $path)) {
+    http_response_code(400);
+    header('Content-Type: application/json');
+    echo json_encode(['error' => 'Invalid proxy path.']);
+    exit;
+}
+
+// Build the full target URL
+$targetUrl = BAILEYS_BASE . $path;
+
+// ---------------------------------------------------------------------------
+// Collect incoming request details
+// ---------------------------------------------------------------------------
+$method  = $_SERVER['REQUEST_METHOD'];
+$body    = file_get_contents('php://input');
+$headers = [];
+
+// Forward Content-Type if present
+if (!empty($_SERVER['CONTENT_TYPE'])) {
+    $headers[] = 'Content-Type: ' . $_SERVER['CONTENT_TYPE'];
+}
+
+// ---------------------------------------------------------------------------
+// cURL request to Baileys
+// ---------------------------------------------------------------------------
+$ch = curl_init($targetUrl);
+
+curl_setopt_array($ch, [
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_TIMEOUT        => REQUEST_TIMEOUT,
+    CURLOPT_FOLLOWLOCATION => true,
+    CURLOPT_CUSTOMREQUEST  => $method,
+    CURLOPT_HTTPHEADER     => $headers,
+]);
+
+if (in_array($method, ['POST', 'PUT', 'PATCH']) && $body !== '') {
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+}
+
+// Capture response headers so we can forward Content-Type back
+curl_setopt($ch, CURLOPT_HEADERFUNCTION, function ($ch, $header) {
+    $lower = strtolower(trim($header));
+    // Forward content-type from upstream to browser
+    if (strpos($lower, 'content-type:') === 0) {
+        header(trim($header), true);
+    }
+    return strlen($header);
+});
+
+$response   = curl_exec($ch);
+$httpStatus = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+$curlError  = curl_error($ch);
+curl_close($ch);
+
+// ---------------------------------------------------------------------------
+// Error handling
+// ---------------------------------------------------------------------------
+if ($response === false) {
+    http_response_code(502);
+    header('Content-Type: application/json');
+    echo json_encode([
+        'error'   => 'Proxy could not reach Baileys service.',
+        'detail'  => $curlError,
+        'target'  => $targetUrl,
+    ]);
+    exit;
+}
+
+// ---------------------------------------------------------------------------
+// Return upstream response to the browser
+// ---------------------------------------------------------------------------
+http_response_code($httpStatus ?: 502);
+echo $response;

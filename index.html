@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Device Manager</title>
+    <link href="https://cdn.jsdelivr.net/npm/@mdi/font@7.x/css/materialdesignicons.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/vuetify@3.5.2/dist/vuetify.min.css" rel="stylesheet">
+</head>
+<body>
+    <div id="app"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/vue@3.4.15/dist/vue.global.prod.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vuetify@3.5.2/dist/vuetify.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vuex@4.1.0/dist/vuex.global.prod.js"></script>
+
+    <script>
+    const { createApp, ref, computed, onMounted, onUnmounted, watch } = Vue;
+    const { createVuetify } = Vuetify;
+    const { createStore }   = Vuex;
+
+    const API = '/baileys-proxy.php';
+    const MAX = 10;
+
+    // -------------------------------------------------------------------------
+    // Vuex Store
+    // -------------------------------------------------------------------------
+    const store = createStore({
+        state() {
+            return {
+                sessions: [],          // [{ session_id, label, status, phone, qr, polling }]
+                maxSessions: MAX,
+                globalLoading: false,
+                snackbar: { show: false, text: '', color: 'success' }
+            };
+        },
+        mutations: {
+            SET_SESSIONS(state, list) {
+                // Merge incoming list with existing runtime QR / polling data
+                state.sessions = list.map(incoming => {
+                    const existing = state.sessions.find(s => s.session_id === incoming.session_id);
+                    return {
+                        ...incoming,
+                        qr:      existing ? existing.qr      : null,
+                        polling: existing ? existing.polling : null
+                    };
+                });
+            },
+            SET_MAX(state, val) { state.maxSessions = val; },
+            UPDATE_SESSION(state, patch) {
+                const idx = state.sessions.findIndex(s => s.session_id === patch.session_id);
+                if (idx !== -1) Object.assign(state.sessions[idx], patch);
+            },
+            ADD_SESSION(state, session) {
+                state.sessions.push({ ...session, qr: null, polling: null });
+            },
+            REMOVE_SESSION(state, sessionId) {
+                state.sessions = state.sessions.filter(s => s.session_id !== sessionId);
+            },
+            SET_LOADING(state, val) { state.globalLoading = val; },
+            SHOW_SNACK(state, { text, color }) {
+                state.snackbar = { show: true, text, color: color || 'success' };
+            },
+            HIDE_SNACK(state) { state.snackbar.show = false; }
+        },
+        actions: {
+            async loadSessions({ commit, dispatch }) {
+                commit('SET_LOADING', true);
+                try {
+                    const res  = await fetch(`${API}?path=/api/sessions/list`);
+                    const data = await res.json();
+                    commit('SET_SESSIONS', data.sessions || []);
+                    commit('SET_MAX', data.max || MAX);
+                    // Resume polling for any non-settled sessions
+                    for (const s of (data.sessions || [])) {
+                        if (s.status === 'SCAN_QR' || s.status === 'CONNECTING') {
+                            dispatch('startPolling', s.session_id);
+                        }
+                    }
+                } catch(e) {
+                    commit('SHOW_SNACK', { text: 'Failed to load sessions.', color: 'error' });
+                } finally {
+                    commit('SET_LOADING', false);
+                }
+            },
+
+            async addSession({ state, commit, dispatch }, { sessionId, label }) {
+                if (state.sessions.length >= state.maxSessions) {
+                    commit('SHOW_SNACK', { text: `Max ${state.maxSessions} sessions reached.`, color: 'error' });
+                    return false;
+                }
+                try {
+                    const res  = await fetch(`${API}?path=/api/session/start`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ sessionId, label })
+                    });
+                    const data = await res.json();
+                    if (data.error) throw new Error(data.error);
+
+                    commit('ADD_SESSION', { session_id: sessionId, label: label || sessionId, status: 'CONNECTING', phone: null });
+                    dispatch('startPolling', sessionId);
+                    commit('SHOW_SNACK', { text: `Session "${label || sessionId}" added.` });
+                    return true;
+                } catch(e) {
+                    commit('SHOW_SNACK', { text: e.message, color: 'error' });
+                    return false;
+                }
+            },
+
+            async reconnectSession({ commit, dispatch }, { session_id, label }) {
+                commit('UPDATE_SESSION', { session_id, status: 'CONNECTING', qr: null });
+                try {
+                    await fetch(`${API}?path=/api/session/start`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ sessionId: session_id, label })
+                    });
+                    dispatch('startPolling', session_id);
+                } catch(e) {
+                    commit('UPDATE_SESSION', { session_id, status: 'DISCONNECTED' });
+                }
+            },
+
+            async deleteSession({ state, commit, dispatch }, sessionId) {
+                dispatch('stopPolling', sessionId);
+                try {
+                    await fetch(`${API}?path=/api/session/${sessionId}`, { method: 'DELETE' });
+                    commit('REMOVE_SESSION', sessionId);
+                    commit('SHOW_SNACK', { text: `Session "${sessionId}" removed.`, color: 'warning' });
+                } catch(e) {
+                    commit('SHOW_SNACK', { text: 'Delete failed: ' + e.message, color: 'error' });
+                }
+            },
+
+            async pollStatus({ commit, dispatch, state }, sessionId) {
+                try {
+                    const res  = await fetch(`${API}?path=/api/session/status/${sessionId}`);
+                    const data = await res.json();
+                    commit('UPDATE_SESSION', { session_id: sessionId, status: data.status, qr: data.qr || null });
+
+                    if (data.status !== 'SCAN_QR' && data.status !== 'CONNECTING') {
+                        dispatch('stopPolling', sessionId);
+                    }
+                } catch(_) {}
+            },
+
+            startPolling({ state, commit, dispatch }, sessionId) {
+                dispatch('stopPolling', sessionId);
+                const interval = setInterval(() => dispatch('pollStatus', sessionId), 3000);
+                const s = state.sessions.find(s => s.session_id === sessionId);
+                if (s) s.polling = interval;
+                // Kick once immediately
+                dispatch('pollStatus', sessionId);
+            },
+
+            stopPolling({ state }, sessionId) {
+                const s = state.sessions.find(s => s.session_id === sessionId);
+                if (s && s.polling) { clearInterval(s.polling); s.polling = null; }
+            },
+
+            stopAllPolling({ state, dispatch }) {
+                for (const s of state.sessions) dispatch('stopPolling', s.session_id);
+            }
+        }
+    });
+
+    // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
+    function statusColor(status) {
+        if (status === 'CONNECTED')   return 'success';
+        if (status === 'SCAN_QR')     return 'warning';
+        if (status === 'CONNECTING')  return 'info';
+        return 'error';
+    }
+    function statusIcon(status) {
+        if (status === 'CONNECTED')   return 'mdi-lan-connect';
+        if (status === 'SCAN_QR')     return 'mdi-qrcode-scan';
+        if (status === 'CONNECTING')  return 'mdi-sync';
+        return 'mdi-lan-disconnect';
+    }
+
+    // -------------------------------------------------------------------------
+    // App
+    // -------------------------------------------------------------------------
+    const vuetify = createVuetify({ theme: { defaultTheme: 'light' } });
+
+    const app = createApp({
+        template: `
+<v-app theme="light">
+
+  <!-- Top Bar -->
+  <v-app-bar color="green-darken-2" elevation="2">
+    <v-app-bar-title>
+      <v-icon icon="mdi-whatsapp" class="mr-2"></v-icon>
+      WhatsApp Device Manager
+    </v-app-bar-title>
+    <template v-slot:append>
+      <v-chip color="white" variant="outlined" class="mr-3">
+        {{ sessions.length }} / {{ maxSessions }} slots
+      </v-chip>
+      <v-btn icon="mdi-refresh" variant="text" color="white" @click="reload" :loading="loading"></v-btn>
+    </template>
+  </v-app-bar>
+
+  <v-main class="bg-grey-lighten-4">
+    <v-container class="py-6">
+
+      <!-- Empty state -->
+      <div v-if="!loading && sessions.length === 0" class="text-center py-12">
+        <v-icon icon="mdi-cellphone-off" size="72" color="grey-lighten-1" class="mb-4"></v-icon>
+        <p class="text-h6 text-grey">No sessions registered yet.</p>
+        <p class="text-body-2 text-grey-darken-1 mb-6">Add up to {{ maxSessions }} WhatsApp numbers.</p>
+        <v-btn color="success" prepend-icon="mdi-plus" @click="openAddDialog">Add First Session</v-btn>
+      </div>
+
+      <!-- Session grid -->
+      <v-row v-else>
+        <v-col
+          v-for="s in sessions"
+          :key="s.session_id"
+          cols="12" sm="6" md="4" lg="3"
+        >
+          <v-card class="rounded-lg" elevation="3" height="100%">
+
+            <!-- Card header -->
+            <v-card-item>
+              <template v-slot:prepend>
+                <v-icon icon="mdi-whatsapp" :color="statusColor(s.status)" size="32"></v-icon>
+              </template>
+              <v-card-title class="text-subtitle-1 font-weight-bold">{{ s.label || s.session_id }}</v-card-title>
+              <v-card-subtitle class="text-caption">{{ s.session_id }}</v-card-subtitle>
+              <template v-slot:append>
+                <v-menu>
+                  <template v-slot:activator="{ props }">
+                    <v-btn v-bind="props" icon="mdi-dots-vertical" size="small" variant="text"></v-btn>
+                  </template>
+                  <v-list density="compact">
+                    <v-list-item prepend-icon="mdi-refresh" title="Reconnect" @click="reconnect(s)" :disabled="s.status === 'CONNECTED' || s.status === 'CONNECTING'"></v-list-item>
+                    <v-list-item prepend-icon="mdi-delete" title="Remove" base-color="error" @click="confirmDelete(s)"></v-list-item>
+                  </v-list>
+                </v-menu>
+              </template>
+            </v-card-item>
+
+            <v-divider></v-divider>
+
+            <!-- Status chip -->
+            <div class="px-4 pt-3 pb-1">
+              <v-chip :color="statusColor(s.status)" size="small" class="font-weight-bold text-uppercase">
+                <v-icon start :icon="statusIcon(s.status)" size="14"></v-icon>
+                {{ s.status }}
+              </v-chip>
+              <span v-if="s.phone" class="text-caption text-grey-darken-2 ml-2">{{ s.phone }}</span>
+            </div>
+
+            <!-- Card body -->
+            <v-card-text class="d-flex flex-column align-center justify-center" style="min-height:180px">
+
+              <!-- DISCONNECTED -->
+              <div v-if="s.status === 'DISCONNECTED'" class="text-center">
+                <v-icon icon="mdi-wifi-off" size="40" color="grey-lighten-1" class="mb-2"></v-icon>
+                <p class="text-caption text-grey mb-3">Not connected</p>
+                <v-btn size="small" color="success" variant="tonal" prepend-icon="mdi-link-variant" @click="reconnect(s)">Connect</v-btn>
+              </div>
+
+              <!-- CONNECTING -->
+              <div v-if="s.status === 'CONNECTING'" class="text-center">
+                <v-progress-circular indeterminate color="info" size="40" class="mb-2"></v-progress-circular>
+                <p class="text-caption text-grey-darken-1">Initialising...</p>
+              </div>
+
+              <!-- SCAN_QR -->
+              <div v-if="s.status === 'SCAN_QR'" class="text-center">
+                <div v-if="s.qr">
+                  <p class="text-caption text-grey-darken-2 mb-2">Scan with WhatsApp → Linked Devices</p>
+                  <v-img :src="s.qr" width="160" height="160" class="mx-auto elevation-1 rounded"></v-img>
+                </div>
+                <div v-else>
+                  <v-progress-circular indeterminate color="warning" size="40" class="mb-2"></v-progress-circular>
+                  <p class="text-caption text-grey-darken-1">Waiting for QR...</p>
+                </div>
+              </div>
+
+              <!-- CONNECTED -->
+              <div v-if="s.status === 'CONNECTED'" class="text-center">
+                <v-icon icon="mdi-check-circle" color="success" size="48" class="mb-2"></v-icon>
+                <p class="text-success text-caption font-weight-bold">Active &amp; listening</p>
+              </div>
+
+            </v-card-text>
+          </v-card>
+        </v-col>
+
+        <!-- Add slot card -->
+        <v-col v-if="sessions.length < maxSessions" cols="12" sm="6" md="4" lg="3">
+          <v-card
+            class="rounded-lg d-flex align-center justify-center"
+            elevation="1"
+            height="100%"
+            min-height="260"
+            style="cursor:pointer; border: 2px dashed #aaa;"
+            @click="openAddDialog"
+          >
+            <div class="text-center pa-6">
+              <v-icon icon="mdi-plus-circle-outline" size="48" color="grey-lighten-1"></v-icon>
+              <p class="text-body-2 text-grey mt-2">Add Session</p>
+            </div>
+          </v-card>
+        </v-col>
+      </v-row>
+
+    </v-container>
+  </v-main>
+
+  <!-- ── Add Session Dialog ── -->
+  <v-dialog v-model="addDialog" max-width="440" persistent>
+    <v-card class="pa-2 rounded-lg">
+      <v-card-title class="text-h6 pt-4 px-4">
+        <v-icon icon="mdi-plus" class="mr-2" color="success"></v-icon>Add New Session
+      </v-card-title>
+      <v-card-text>
+        <v-text-field
+          v-model="newLabel"
+          label="Label (e.g. Sales Line 1)"
+          variant="outlined"
+          density="compact"
+          class="mb-3"
+          clearable
+        ></v-text-field>
+        <v-text-field
+          v-model="newSessionId"
+          label="Session ID (no spaces, e.g. sales_1)"
+          variant="outlined"
+          density="compact"
+          :rules="[v => /^[a-z0-9_]+$/.test(v) || 'Only lowercase, numbers, underscore']"
+          hint="Unique identifier used internally"
+          persistent-hint
+        ></v-text-field>
+      </v-card-text>
+      <v-card-actions class="px-4 pb-4">
+        <v-spacer></v-spacer>
+        <v-btn variant="text" @click="addDialog = false">Cancel</v-btn>
+        <v-btn color="success" variant="flat" :loading="addLoading" @click="submitAdd" :disabled="!newSessionId || !/^[a-z0-9_]+$/.test(newSessionId)">Add</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <!-- ── Delete Confirm Dialog ── -->
+  <v-dialog v-model="deleteDialog" max-width="380">
+    <v-card class="pa-2 rounded-lg">
+      <v-card-title class="text-h6 pt-4 px-4">Remove Session?</v-card-title>
+      <v-card-text>
+        This will disconnect and permanently remove <strong>{{ deleteTarget?.label || deleteTarget?.session_id }}</strong>.
+        The device will be logged out.
+      </v-card-text>
+      <v-card-actions class="px-4 pb-4">
+        <v-spacer></v-spacer>
+        <v-btn variant="text" @click="deleteDialog = false">Cancel</v-btn>
+        <v-btn color="error" variant="flat" @click="doDelete">Remove</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <!-- ── Snackbar ── -->
+  <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3500" location="bottom right">
+    {{ snackbar.text }}
+    <template v-slot:actions>
+      <v-btn variant="text" icon="mdi-close" @click="$store.commit('HIDE_SNACK')"></v-btn>
+    </template>
+  </v-snackbar>
+
+</v-app>
+        `,
+        setup() {
+            const sessions    = computed(() => store.state.sessions);
+            const maxSessions = computed(() => store.state.maxSessions);
+            const loading     = computed(() => store.state.globalLoading);
+            const snackbar    = computed(() => store.state.snackbar);
+
+            // Add dialog
+            const addDialog   = ref(false);
+            const newSessionId = ref('');
+            const newLabel    = ref('');
+            const addLoading  = ref(false);
+
+            // Delete dialog
+            const deleteDialog = ref(false);
+            const deleteTarget = ref(null);
+
+            const openAddDialog = () => {
+                newSessionId.value = '';
+                newLabel.value = '';
+                addDialog.value = true;
+            };
+
+            const submitAdd = async () => {
+                addLoading.value = true;
+                const ok = await store.dispatch('addSession', {
+                    sessionId: newSessionId.value,
+                    label: newLabel.value || newSessionId.value
+                });
+                addLoading.value = false;
+                if (ok) addDialog.value = false;
+            };
+
+            const confirmDelete = (s) => { deleteTarget.value = s; deleteDialog.value = true; };
+            const doDelete = () => {
+                store.dispatch('deleteSession', deleteTarget.value.session_id);
+                deleteDialog.value = false;
+            };
+
+            const reconnect = (s) => store.dispatch('reconnectSession', s);
+            const reload    = () => store.dispatch('loadSessions');
+
+            onMounted(() => store.dispatch('loadSessions'));
+            onUnmounted(() => store.dispatch('stopAllPolling'));
+
+            return {
+                sessions, maxSessions, loading, snackbar,
+                addDialog, newSessionId, newLabel, addLoading, openAddDialog, submitAdd,
+                deleteDialog, deleteTarget, confirmDelete, doDelete,
+                reconnect, reload,
+                statusColor, statusIcon
+            };
+        }
+    });
+
+    app.use(store);
+    app.use(vuetify);
+    app.mount('#app');
+    </script>
+</body>
+</html>
