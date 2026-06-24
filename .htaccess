@@ -1,5 +1,4 @@
 # Baileys Manager — Apache rewrite rules
-# Enables clean REST routes for api.php (PATH_INFO)
 
 Options -Indexes
 AcceptPathInfo On
@@ -7,8 +6,14 @@ AcceptPathInfo On
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
+    # Pass Authorization header to PHP
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
     # Route /api/* to api.php with PATH_INFO
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteRule ^api/(.*)$ api.php/$1 [L,QSA]
 </IfModule>
+
+# Alternative method for some Apache setups
+SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
