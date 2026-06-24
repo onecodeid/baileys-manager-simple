@@ -1,0 +1,1 @@
+# baileys-manager-simple
