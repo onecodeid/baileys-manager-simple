@@ -49,11 +49,7 @@ define('BAILEYS_BASE',    'http://127.0.0.1:3000');
 define('REQUEST_TIMEOUT', 20);
 define('UPLOAD_MAX_MB',   16);        // max upload size per file
 
-define('DB_HOST', '127.0.0.1');
-define('DB_PORT', 3306);
-define('DB_NAME', 'baileys_manager');
-define('DB_USER', 'root');
-define('DB_PASS', '');
+require_once __DIR__ . '/db_config.php';
 
 // Upload temp dir inside the project (writable by web server)
 define('UPLOAD_TMP',  __DIR__ . '/s/uploads');

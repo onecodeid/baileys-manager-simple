@@ -17,11 +17,7 @@ header('Cache-Control: no-store');
 // ---------------------------------------------------------------------------
 // Database connection (adjust to match your environment)
 // ---------------------------------------------------------------------------
-define('DB_HOST', '127.0.0.1');
-define('DB_PORT', 3306);
-define('DB_NAME', 'baileys_manager');
-define('DB_USER', 'root');
-define('DB_PASS', '');
+require_once __DIR__ . '/db_config.php';
 
 function getDB(): PDO {
     static $pdo = null;
