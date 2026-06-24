@@ -21,7 +21,7 @@ define('DB_HOST', '127.0.0.1');
 define('DB_PORT', 3306);
 define('DB_NAME', 'baileys_manager');
 define('DB_USER', 'root');
-define('DB_PASS', '');
+define('DB_PASS', 'bio!102938');
 
 function getDB(): PDO {
     static $pdo = null;
