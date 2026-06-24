@@ -271,6 +271,7 @@
                   </template>
                   <v-list density="compact">
                     <v-list-item prepend-icon="mdi-refresh" title="Reconnect" @click="reconnect(s)" :disabled="s.status === 'CONNECTED' || s.status === 'CONNECTING'"></v-list-item>
+                    <v-list-item prepend-icon="mdi-content-copy" title="Copy Token" @click="copyToken(s.session_id)"></v-list-item>
                     <v-list-item prepend-icon="mdi-delete" title="Remove" base-color="error" @click="confirmDelete(s)"></v-list-item>
                   </v-list>
                 </v-menu>
@@ -323,6 +324,21 @@
               </div>
 
             </v-card-text>
+
+            <!-- Token row -->
+            <v-divider></v-divider>
+            <div class="px-3 py-2 d-flex align-center" style="background:#f9fbe7;border-radius:0 0 8px 8px">
+              <v-icon icon="mdi-key-variant" size="14" color="grey-darken-1" class="mr-1"></v-icon>
+              <span class="text-caption text-grey-darken-2 mr-1" style="font-family:monospace;font-size:10px;word-break:break-all;flex:1">{{ s.session_id }}</span>
+              <v-btn
+                icon="mdi-content-copy"
+                size="x-small"
+                variant="text"
+                color="grey-darken-1"
+                :title="'Copy token: ' + s.session_id"
+                @click="copyToken(s.session_id)"
+              ></v-btn>
+            </div>
           </v-card>
         </v-col>
 
@@ -348,7 +364,7 @@
   </v-main>
 
   <!-- ── Add Session Dialog ── -->
-  <v-dialog v-model="addDialog" max-width="440" persistent>
+  <v-dialog v-model="addDialog" max-width="460" persistent>
     <v-card class="pa-2 rounded-lg">
       <v-card-title class="text-h6 pt-4 px-4">
         <v-icon icon="mdi-plus" class="mr-2" color="success"></v-icon>Add New Session
@@ -361,21 +377,28 @@
           density="compact"
           class="mb-3"
           clearable
+          autofocus
         ></v-text-field>
         <v-text-field
           v-model="newSessionId"
-          label="Session ID (no spaces, e.g. sales_1)"
+          label="Session Token (auto-generated)"
           variant="outlined"
           density="compact"
-          :rules="[v => /^[a-z0-9_]+$/.test(v) || 'Only lowercase, numbers, underscore']"
-          hint="Unique identifier used internally"
+          readonly
+          hint="This token is the API key to send messages via this session"
           persistent-hint
-        ></v-text-field>
+          :append-inner-icon="'mdi-refresh'"
+          @click:append-inner="regenerateSessionId"
+        >
+          <template v-slot:prepend-inner>
+            <v-icon icon="mdi-key-variant" color="grey" size="18"></v-icon>
+          </template>
+        </v-text-field>
       </v-card-text>
       <v-card-actions class="px-4 pb-4">
         <v-spacer></v-spacer>
         <v-btn variant="text" @click="addDialog = false">Cancel</v-btn>
-        <v-btn color="success" variant="flat" :loading="addLoading" @click="submitAdd" :disabled="!newSessionId || !/^[a-z0-9_]+$/.test(newSessionId)">Add</v-btn>
+        <v-btn color="success" variant="flat" :loading="addLoading" @click="submitAdd" :disabled="!newSessionId || !newLabel">Add</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
@@ -416,10 +439,18 @@
             const authUser = ref(window.__authUser || { name: '...', email: '' });
 
             // Add dialog
-            const addDialog   = ref(false);
+            const addDialog    = ref(false);
             const newSessionId = ref('');
-            const newLabel    = ref('');
-            const addLoading  = ref(false);
+            const newLabel     = ref('');
+            const addLoading   = ref(false);
+
+            // Generate a random 32-char hex token (like MD5)
+            const genSessionId = () => {
+                const arr = new Uint8Array(16);
+                crypto.getRandomValues(arr);
+                return Array.from(arr).map(b => b.toString(16).padStart(2,'0')).join('');
+            };
+            const regenerateSessionId = () => { newSessionId.value = genSessionId(); };
 
             // Delete dialog
             const deleteDialog = ref(false);
@@ -441,7 +472,7 @@
             };
 
             const openAddDialog = () => {
-                newSessionId.value = '';
+                newSessionId.value = genSessionId();
                 newLabel.value = '';
                 addDialog.value = true;
             };
@@ -465,15 +496,24 @@
             const reconnect = (s) => store.dispatch('reconnectSession', s);
             const reload    = () => store.dispatch('loadSessions');
 
+            const copyToken = (token) => {
+                navigator.clipboard.writeText(token).then(() => {
+                    store.commit('SHOW_SNACK', { text: 'Token copied to clipboard!', color: 'info' });
+                }).catch(() => {
+                    store.commit('SHOW_SNACK', { text: 'Copy failed — select token manually.', color: 'error' });
+                });
+            };
+
             onMounted(() => store.dispatch('loadSessions'));
             onUnmounted(() => store.dispatch('stopAllPolling'));
 
             return {
                 sessions, maxSessions, loading, snackbar,
                 authUser, logoutLoading, doLogout,
+                regenerateSessionId,
                 addDialog, newSessionId, newLabel, addLoading, openAddDialog, submitAdd,
                 deleteDialog, deleteTarget, confirmDelete, doDelete,
-                reconnect, reload,
+                reconnect, reload, copyToken,
                 statusColor, statusIcon
             };
         }

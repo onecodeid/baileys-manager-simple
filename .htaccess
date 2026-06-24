@@ -1,0 +1,14 @@
+# Baileys Manager — Apache rewrite rules
+# Enables clean REST routes for api.php (PATH_INFO)
+
+Options -Indexes
+AcceptPathInfo On
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Route /api/* to api.php with PATH_INFO
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^api/(.*)$ api.php/$1 [L,QSA]
+</IfModule>
