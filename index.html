@@ -241,125 +241,355 @@
   <v-main class="bg-grey-lighten-4">
     <v-container class="py-6">
 
-      <!-- Empty state -->
-      <div v-if="!loading && sessions.length === 0" class="text-center py-12">
-        <v-icon icon="mdi-cellphone-off" size="72" color="grey-lighten-1" class="mb-4"></v-icon>
-        <p class="text-h6 text-grey">No sessions registered yet.</p>
-        <p class="text-body-2 text-grey-darken-1 mb-6">Add up to {{ maxSessions }} WhatsApp numbers.</p>
-        <v-btn color="success" prepend-icon="mdi-plus" @click="openAddDialog">Add First Session</v-btn>
-      </div>
+      <!-- Navigation Tabs -->
+      <v-tabs v-model="activeTab" color="green-darken-2" align-tabs="start" class="mb-6 bg-white rounded-lg elevation-1">
+        <v-tab value="sessions" prepend-icon="mdi-whatsapp">
+          WhatsApp Sessions
+        </v-tab>
+        <v-tab value="tutorial" prepend-icon="mdi-code-json">
+          API Tutorial &amp; Code Examples
+        </v-tab>
+      </v-tabs>
 
-      <!-- Session grid -->
-      <v-row v-else>
-        <v-col
-          v-for="s in sessions"
-          :key="s.session_id"
-          cols="12" sm="6" md="4" lg="3"
-        >
-          <v-card class="rounded-lg" elevation="3" height="100%">
+      <!-- Tabs Windows -->
+      <v-window v-model="activeTab">
 
-            <!-- Card header -->
-            <v-card-item>
-              <template v-slot:prepend>
-                <v-icon icon="mdi-whatsapp" :color="statusColor(s.status)" size="32"></v-icon>
-              </template>
-              <v-card-title class="text-subtitle-1 font-weight-bold">{{ s.label || s.session_id }}</v-card-title>
-              <v-card-subtitle class="text-caption">{{ s.session_id }}</v-card-subtitle>
-              <template v-slot:append>
-                <v-menu>
-                  <template v-slot:activator="{ props }">
-                    <v-btn v-bind="props" icon="mdi-dots-vertical" size="small" variant="text"></v-btn>
+        <!-- Tab 1: Sessions List -->
+        <v-window-item value="sessions">
+          <!-- Empty state -->
+          <div v-if="!loading && sessions.length === 0" class="text-center py-12">
+            <v-icon icon="mdi-cellphone-off" size="72" color="grey-lighten-1" class="mb-4"></v-icon>
+            <p class="text-h6 text-grey">No sessions registered yet.</p>
+            <p class="text-body-2 text-grey-darken-1 mb-6">Add up to {{ maxSessions }} WhatsApp numbers.</p>
+            <v-btn color="success" prepend-icon="mdi-plus" @click="openAddDialog">Add First Session</v-btn>
+          </div>
+
+          <!-- Session grid -->
+          <v-row v-else>
+            <v-col
+              v-for="s in sessions"
+              :key="s.session_id"
+              cols="12" sm="6" md="4" lg="3"
+            >
+              <v-card class="rounded-lg" elevation="3" height="100%">
+
+                <!-- Card header -->
+                <v-card-item>
+                  <template v-slot:prepend>
+                    <v-icon icon="mdi-whatsapp" :color="statusColor(s.status)" size="32"></v-icon>
                   </template>
-                  <v-list density="compact">
-                    <v-list-item prepend-icon="mdi-refresh" title="Reconnect" @click="reconnect(s)" :disabled="s.status === 'CONNECTED' || s.status === 'CONNECTING'"></v-list-item>
-                    <v-list-item prepend-icon="mdi-content-copy" title="Copy Token" @click="copyToken(s.session_id)"></v-list-item>
-                    <v-list-item prepend-icon="mdi-delete" title="Remove" base-color="error" @click="confirmDelete(s)"></v-list-item>
-                  </v-list>
-                </v-menu>
-              </template>
-            </v-card-item>
+                  <v-card-title class="text-subtitle-1 font-weight-bold">{{ s.label || s.session_id }}</v-card-title>
+                  <v-card-subtitle class="text-caption">{{ s.session_id }}</v-card-subtitle>
+                  <template v-slot:append>
+                    <v-menu>
+                      <template v-slot:activator="{ props }">
+                        <v-btn v-bind="props" icon="mdi-dots-vertical" size="small" variant="text"></v-btn>
+                      </template>
+                      <v-list density="compact">
+                        <v-list-item prepend-icon="mdi-refresh" title="Reconnect" @click="reconnect(s)" :disabled="s.status === 'CONNECTED' || s.status === 'CONNECTING'"></v-list-item>
+                        <v-list-item prepend-icon="mdi-content-copy" title="Copy Token" @click="copyToken(s.session_id)"></v-list-item>
+                        <v-list-item prepend-icon="mdi-delete" title="Remove" base-color="error" @click="confirmDelete(s)"></v-list-item>
+                      </v-list>
+                    </v-menu>
+                  </template>
+                </v-card-item>
 
-            <v-divider></v-divider>
+                <v-divider></v-divider>
 
-            <!-- Status chip -->
-            <div class="px-4 pt-3 pb-1">
-              <v-chip :color="statusColor(s.status)" size="small" class="font-weight-bold text-uppercase">
-                <v-icon start :icon="statusIcon(s.status)" size="14"></v-icon>
-                {{ s.status }}
-              </v-chip>
-              <span v-if="s.phone" class="text-caption text-grey-darken-2 ml-2">{{ s.phone }}</span>
-            </div>
-
-            <!-- Card body -->
-            <v-card-text class="d-flex flex-column align-center justify-center" style="min-height:180px">
-
-              <!-- DISCONNECTED -->
-              <div v-if="s.status === 'DISCONNECTED'" class="text-center">
-                <v-icon icon="mdi-wifi-off" size="40" color="grey-lighten-1" class="mb-2"></v-icon>
-                <p class="text-caption text-grey mb-3">Not connected</p>
-                <v-btn size="small" color="success" variant="tonal" prepend-icon="mdi-link-variant" @click="reconnect(s)">Connect</v-btn>
-              </div>
-
-              <!-- CONNECTING -->
-              <div v-if="s.status === 'CONNECTING'" class="text-center">
-                <v-progress-circular indeterminate color="info" size="40" class="mb-2"></v-progress-circular>
-                <p class="text-caption text-grey-darken-1">Initialising...</p>
-              </div>
-
-              <!-- SCAN_QR -->
-              <div v-if="s.status === 'SCAN_QR'" class="text-center">
-                <div v-if="s.qr">
-                  <p class="text-caption text-grey-darken-2 mb-2">Scan with WhatsApp → Linked Devices</p>
-                  <v-img :src="s.qr" width="160" height="160" class="mx-auto elevation-1 rounded"></v-img>
+                <!-- Status chip -->
+                <div class="px-4 pt-3 pb-1">
+                  <v-chip :color="statusColor(s.status)" size="small" class="font-weight-bold text-uppercase">
+                    <v-icon start :icon="statusIcon(s.status)" size="14"></v-icon>
+                    {{ s.status }}
+                  </v-chip>
+                  <span v-if="s.phone" class="text-caption text-grey-darken-2 ml-2">{{ s.phone }}</span>
                 </div>
-                <div v-else>
-                  <v-progress-circular indeterminate color="warning" size="40" class="mb-2"></v-progress-circular>
-                  <p class="text-caption text-grey-darken-1">Waiting for QR...</p>
+
+                <!-- Card body -->
+                <v-card-text class="d-flex flex-column align-center justify-center" style="min-height:180px">
+
+                  <!-- DISCONNECTED -->
+                  <div v-if="s.status === 'DISCONNECTED'" class="text-center">
+                    <v-icon icon="mdi-wifi-off" size="40" color="grey-lighten-1" class="mb-2"></v-icon>
+                    <p class="text-caption text-grey mb-3">Not connected</p>
+                    <v-btn size="small" color="success" variant="tonal" prepend-icon="mdi-link-variant" @click="reconnect(s)">Connect</v-btn>
+                  </div>
+
+                  <!-- CONNECTING -->
+                  <div v-if="s.status === 'CONNECTING'" class="text-center">
+                    <v-progress-circular indeterminate color="info" size="40" class="mb-2"></v-progress-circular>
+                    <p class="text-caption text-grey-darken-1">Initialising...</p>
+                  </div>
+
+                  <!-- SCAN_QR -->
+                  <div v-if="s.status === 'SCAN_QR'" class="text-center">
+                    <div v-if="s.qr">
+                      <p class="text-caption text-grey-darken-2 mb-2">Scan with WhatsApp → Linked Devices</p>
+                      <v-img :src="s.qr" width="160" height="160" class="mx-auto elevation-1 rounded"></v-img>
+                    </div>
+                    <div v-else>
+                      <v-progress-circular indeterminate color="warning" size="40" class="mb-2"></v-progress-circular>
+                      <p class="text-caption text-grey-darken-1">Waiting for QR...</p>
+                    </div>
+                  </div>
+
+                  <!-- CONNECTED -->
+                  <div v-if="s.status === 'CONNECTED'" class="text-center">
+                    <v-icon icon="mdi-check-circle" color="success" size="48" class="mb-2"></v-icon>
+                    <p class="text-success text-caption font-weight-bold">Active &amp; listening</p>
+                  </div>
+
+                </v-card-text>
+
+                <!-- Token row -->
+                <v-divider></v-divider>
+                <div class="px-3 py-2 d-flex align-center" style="background:#f9fbe7;border-radius:0 0 8px 8px">
+                  <v-icon icon="mdi-key-variant" size="14" color="grey-darken-1" class="mr-1"></v-icon>
+                  <span class="text-caption text-grey-darken-2 mr-1" style="font-family:monospace;font-size:10px;word-break:break-all;flex:1">{{ s.session_id }}</span>
+                  <v-btn
+                    icon="mdi-content-copy"
+                    size="x-small"
+                    variant="text"
+                    color="grey-darken-1"
+                    :title="'Copy token: ' + s.session_id"
+                    @click="copyToken(s.session_id)"
+                  ></v-btn>
                 </div>
-              </div>
+              </v-card>
+            </v-col>
 
-              <!-- CONNECTED -->
-              <div v-if="s.status === 'CONNECTED'" class="text-center">
-                <v-icon icon="mdi-check-circle" color="success" size="48" class="mb-2"></v-icon>
-                <p class="text-success text-caption font-weight-bold">Active &amp; listening</p>
-              </div>
+            <!-- Add slot card -->
+            <v-col v-if="sessions.length < maxSessions" cols="12" sm="6" md="4" lg="3">
+              <v-card
+                class="rounded-lg d-flex align-center justify-center"
+                elevation="1"
+                height="100%"
+                min-height="260"
+                style="cursor:pointer; border: 2px dashed #aaa;"
+                @click="openAddDialog"
+              >
+                <div class="text-center pa-6">
+                  <v-icon icon="mdi-plus-circle-outline" size="48" color="grey-lighten-1"></v-icon>
+                  <p class="text-body-2 text-grey mt-2">Add Session</p>
+                </div>
+              </v-card>
+            </v-col>
+          </v-row>
+        </v-window-item>
 
-            </v-card-text>
+        <!-- Tab 2: REST API Tutorial -->
+        <v-window-item value="tutorial">
+          <v-row>
+            <v-col cols="12" md="4" lg="3">
+              <v-card class="rounded-lg mb-4 pa-4" elevation="2">
+                <div class="text-subtitle-1 font-weight-bold mb-3">
+                  <v-icon icon="mdi-information-outline" class="mr-2" color="blue"></v-icon>API Info
+                </div>
+                <div class="text-body-2 mb-4">
+                  All REST endpoints require authentication using the Session Token as a Bearer token.
+                </div>
+                
+                <v-alert type="info" variant="tonal" class="mb-4 text-caption" density="compact">
+                  <strong>Header Format:</strong><br>
+                  <code>Authorization: Bearer &lt;token&gt;</code>
+                </v-alert>
 
-            <!-- Token row -->
-            <v-divider></v-divider>
-            <div class="px-3 py-2 d-flex align-center" style="background:#f9fbe7;border-radius:0 0 8px 8px">
-              <v-icon icon="mdi-key-variant" size="14" color="grey-darken-1" class="mr-1"></v-icon>
-              <span class="text-caption text-grey-darken-2 mr-1" style="font-family:monospace;font-size:10px;word-break:break-all;flex:1">{{ s.session_id }}</span>
-              <v-btn
-                icon="mdi-content-copy"
-                size="x-small"
-                variant="text"
-                color="grey-darken-1"
-                :title="'Copy token: ' + s.session_id"
-                @click="copyToken(s.session_id)"
-              ></v-btn>
-            </div>
-          </v-card>
-        </v-col>
+                <!-- Token Selector -->
+                <v-select
+                  v-model="selectedToken"
+                  :items="sessions"
+                  item-title="label"
+                  item-value="session_id"
+                  label="Select Active Token"
+                  variant="outlined"
+                  density="compact"
+                  hint="Select a session to auto-fill snippets"
+                  persistent-hint
+                  no-data-text="No active sessions"
+                  class="mb-4"
+                ></v-select>
 
-        <!-- Add slot card -->
-        <v-col v-if="sessions.length < maxSessions" cols="12" sm="6" md="4" lg="3">
-          <v-card
-            class="rounded-lg d-flex align-center justify-center"
-            elevation="1"
-            height="100%"
-            min-height="260"
-            style="cursor:pointer; border: 2px dashed #aaa;"
-            @click="openAddDialog"
-          >
-            <div class="text-center pa-6">
-              <v-icon icon="mdi-plus-circle-outline" size="48" color="grey-lighten-1"></v-icon>
-              <p class="text-body-2 text-grey mt-2">Add Session</p>
-            </div>
-          </v-card>
-        </v-col>
-      </v-row>
+                <div class="text-caption text-grey-darken-2">
+                  <strong>Base API URL:</strong><br>
+                  <code class="text-blue-darken-2 break-all">{{ apiBaseUrl }}</code>
+                </div>
+              </v-card>
+            </v-col>
+
+            <v-col cols="12" md="8" lg="9">
+              <v-card class="rounded-lg mb-6" elevation="2">
+                <v-tabs v-model="subTab" color="green-darken-2">
+                  <v-tab value="send-text">Send Text</v-tab>
+                  <v-tab value="send-image">Send Image</v-tab>
+                  <v-tab value="send-file">Send File</v-tab>
+                  <v-tab value="status">Session Status</v-tab>
+                </v-tabs>
+
+                <v-divider></v-divider>
+
+                <v-card-text>
+                  <v-window v-model="subTab">
+                    
+                    <!-- Send Text -->
+                    <v-window-item value="send-text">
+                      <div class="text-subtitle-1 font-weight-bold mb-1">Send Text Message</div>
+                      <div class="text-body-2 text-grey-darken-1 mb-4">
+                        Sends a plain text message to a specific WhatsApp number. JID phone numbers automatically handle trailing <code>@s.whatsapp.net</code>.
+                      </div>
+                      
+                      <v-chip class="mb-4 font-weight-bold" color="success" size="small">POST</v-chip>
+                      <code class="text-body-2 font-weight-bold ml-2">{{ apiBaseUrl }}/send/text</code>
+
+                      <v-tabs v-model="langText" density="compact" color="success" class="mt-4 border-bottom">
+                        <v-tab value="curl">cURL</v-tab>
+                        <v-tab value="php">PHP</v-tab>
+                      </v-tabs>
+
+                      <v-window v-model="langText" class="mt-2">
+                        <v-window-item value="curl">
+                          <v-sheet class="pa-3 rounded bg-grey-darken-4 text-white text-caption position-relative" style="font-family: monospace; white-space: pre-wrap; word-break: break-all;">
+                            <v-btn icon="mdi-content-copy" size="x-small" variant="text" color="white" class="position-absolute" style="top: 8px; right: 8px;" @click="copyToClipboard(curlTextSnippet)"></v-btn>
+                            {{ curlTextSnippet }}
+                          </v-sheet>
+                        </v-window-item>
+                        <v-window-item value="php">
+                          <v-sheet class="pa-3 rounded bg-grey-darken-4 text-white text-caption position-relative" style="font-family: monospace; white-space: pre-wrap; word-break: break-all;">
+                            <v-btn icon="mdi-content-copy" size="x-small" variant="text" color="white" class="position-absolute" style="top: 8px; right: 8px;" @click="copyToClipboard(phpTextSnippet)"></v-btn>
+                            {{ phpTextSnippet }}
+                          </v-sheet>
+                        </v-window-item>
+                      </v-window>
+                    </v-window-item>
+
+                    <!-- Send Image -->
+                    <v-window-item value="send-image">
+                      <div class="text-subtitle-1 font-weight-bold mb-1">Send Image</div>
+                      <div class="text-body-2 text-grey-darken-1 mb-4">
+                        Send an image via a remote image URL (JSON body) or by uploading a file (multipart/form-data).
+                      </div>
+
+                      <v-chip class="mb-4 font-weight-bold" color="success" size="small">POST</v-chip>
+                      <code class="text-body-2 font-weight-bold ml-2">{{ apiBaseUrl }}/send/image</code>
+
+                      <v-tabs v-model="langImage" density="compact" color="success" class="mt-4 border-bottom">
+                        <v-tab value="curl-url">cURL (URL)</v-tab>
+                        <v-tab value="curl-file">cURL (Upload)</v-tab>
+                        <v-tab value="php-url">PHP (URL)</v-tab>
+                        <v-tab value="php-file">PHP (Upload)</v-tab>
+                      </v-tabs>
+
+                      <v-window v-model="langImage" class="mt-2">
+                        <v-window-item value="curl-url">
+                          <v-sheet class="pa-3 rounded bg-grey-darken-4 text-white text-caption position-relative" style="font-family: monospace; white-space: pre-wrap; word-break: break-all;">
+                            <v-btn icon="mdi-content-copy" size="x-small" variant="text" color="white" class="position-absolute" style="top: 8px; right: 8px;" @click="copyToClipboard(curlImageUrlSnippet)"></v-btn>
+                            {{ curlImageUrlSnippet }}
+                          </v-sheet>
+                        </v-window-item>
+                        <v-window-item value="curl-file">
+                          <v-sheet class="pa-3 rounded bg-grey-darken-4 text-white text-caption position-relative" style="font-family: monospace; white-space: pre-wrap; word-break: break-all;">
+                            <v-btn icon="mdi-content-copy" size="x-small" variant="text" color="white" class="position-absolute" style="top: 8px; right: 8px;" @click="copyToClipboard(curlImageFileSnippet)"></v-btn>
+                            {{ curlImageFileSnippet }}
+                          </v-sheet>
+                        </v-window-item>
+                        <v-window-item value="php-url">
+                          <v-sheet class="pa-3 rounded bg-grey-darken-4 text-white text-caption position-relative" style="font-family: monospace; white-space: pre-wrap; word-break: break-all;">
+                            <v-btn icon="mdi-content-copy" size="x-small" variant="text" color="white" class="position-absolute" style="top: 8px; right: 8px;" @click="copyToClipboard(phpImageUrlSnippet)"></v-btn>
+                            {{ phpImageUrlSnippet }}
+                          </v-sheet>
+                        </v-window-item>
+                        <v-window-item value="php-file">
+                          <v-sheet class="pa-3 rounded bg-grey-darken-4 text-white text-caption position-relative" style="font-family: monospace; white-space: pre-wrap; word-break: break-all;">
+                            <v-btn icon="mdi-content-copy" size="x-small" variant="text" color="white" class="position-absolute" style="top: 8px; right: 8px;" @click="copyToClipboard(phpImageFileSnippet)"></v-btn>
+                            {{ phpImageFileSnippet }}
+                          </v-sheet>
+                        </v-window-item>
+                      </v-window>
+                    </v-window-item>
+
+                    <!-- Send File -->
+                    <v-window-item value="send-file">
+                      <div class="text-subtitle-1 font-weight-bold mb-1">Send File (Document)</div>
+                      <div class="text-body-2 text-grey-darken-1 mb-4">
+                        Send a document (PDF, Docx, etc.) via remote URL or direct file upload.
+                      </div>
+
+                      <v-chip class="mb-4 font-weight-bold" color="success" size="small">POST</v-chip>
+                      <code class="text-body-2 font-weight-bold ml-2">{{ apiBaseUrl }}/send/file</code>
+
+                      <v-tabs v-model="langFile" density="compact" color="success" class="mt-4 border-bottom">
+                        <v-tab value="curl-url">cURL (URL)</v-tab>
+                        <v-tab value="curl-file">cURL (Upload)</v-tab>
+                        <v-tab value="php-url">PHP (URL)</v-tab>
+                        <v-tab value="php-file">PHP (Upload)</v-tab>
+                      </v-tabs>
+
+                      <v-window v-model="langFile" class="mt-2">
+                        <v-window-item value="curl-url">
+                          <v-sheet class="pa-3 rounded bg-grey-darken-4 text-white text-caption position-relative" style="font-family: monospace; white-space: pre-wrap; word-break: break-all;">
+                            <v-btn icon="mdi-content-copy" size="x-small" variant="text" color="white" class="position-absolute" style="top: 8px; right: 8px;" @click="copyToClipboard(curlFileUrlSnippet)"></v-btn>
+                            {{ curlFileUrlSnippet }}
+                          </v-sheet>
+                        </v-window-item>
+                        <v-window-item value="curl-file">
+                          <v-sheet class="pa-3 rounded bg-grey-darken-4 text-white text-caption position-relative" style="font-family: monospace; white-space: pre-wrap; word-break: break-all;">
+                            <v-btn icon="mdi-content-copy" size="x-small" variant="text" color="white" class="position-absolute" style="top: 8px; right: 8px;" @click="copyToClipboard(curlFileFileSnippet)"></v-btn>
+                            {{ curlFileFileSnippet }}
+                          </v-sheet>
+                        </v-window-item>
+                        <v-window-item value="php-url">
+                          <v-sheet class="pa-3 rounded bg-grey-darken-4 text-white text-caption position-relative" style="font-family: monospace; white-space: pre-wrap; word-break: break-all;">
+                            <v-btn icon="mdi-content-copy" size="x-small" variant="text" color="white" class="position-absolute" style="top: 8px; right: 8px;" @click="copyToClipboard(phpFileUrlSnippet)"></v-btn>
+                            {{ phpFileUrlSnippet }}
+                          </v-sheet>
+                        </v-window-item>
+                        <v-window-item value="php-file">
+                          <v-sheet class="pa-3 rounded bg-grey-darken-4 text-white text-caption position-relative" style="font-family: monospace; white-space: pre-wrap; word-break: break-all;">
+                            <v-btn icon="mdi-content-copy" size="x-small" variant="text" color="white" class="position-absolute" style="top: 8px; right: 8px;" @click="copyToClipboard(phpFileFileSnippet)"></v-btn>
+                            {{ phpFileFileSnippet }}
+                          </v-sheet>
+                        </v-window-item>
+                      </v-window>
+                    </v-window-item>
+
+                    <!-- Session Status -->
+                    <v-window-item value="status">
+                      <div class="text-subtitle-1 font-weight-bold mb-1">Check Session Status</div>
+                      <div class="text-body-2 text-grey-darken-1 mb-4">
+                        Retrieve connection status information about the session representing your current API Key/Token.
+                      </div>
+
+                      <v-chip class="mb-4 font-weight-bold" color="info" size="small">GET</v-chip>
+                      <code class="text-body-2 font-weight-bold ml-2">{{ apiBaseUrl }}/sessions</code>
+
+                      <v-tabs v-model="langStatus" density="compact" color="success" class="mt-4 border-bottom">
+                        <v-tab value="curl">cURL</v-tab>
+                        <v-tab value="php">PHP</v-tab>
+                      </v-tabs>
+
+                      <v-window v-model="langStatus" class="mt-2">
+                        <v-window-item value="curl">
+                          <v-sheet class="pa-3 rounded bg-grey-darken-4 text-white text-caption position-relative" style="font-family: monospace; white-space: pre-wrap; word-break: break-all;">
+                            <v-btn icon="mdi-content-copy" size="x-small" variant="text" color="white" class="position-absolute" style="top: 8px; right: 8px;" @click="copyToClipboard(curlStatusSnippet)"></v-btn>
+                            {{ curlStatusSnippet }}
+                          </v-sheet>
+                        </v-window-item>
+                        <v-window-item value="php">
+                          <v-sheet class="pa-3 rounded bg-grey-darken-4 text-white text-caption position-relative" style="font-family: monospace; white-space: pre-wrap; word-break: break-all;">
+                            <v-btn icon="mdi-content-copy" size="x-small" variant="text" color="white" class="position-absolute" style="top: 8px; right: 8px;" @click="copyToClipboard(phpStatusSnippet)"></v-btn>
+                            {{ phpStatusSnippet }}
+                          </v-sheet>
+                        </v-window-item>
+                      </v-window>
+                    </v-window-item>
+
+                  </v-window>
+                </v-card-text>
+              </v-card>
+            </v-col>
+          </v-row>
+        </v-window-item>
+
+      </v-window>
 
     </v-container>
   </v-main>
@@ -439,6 +669,184 @@
             // Auth user info
             const authUser = ref(window.__authUser || { name: '...', email: '' });
 
+            // Navigation tabs
+            const activeTab = ref('sessions');
+            const subTab = ref('send-text');
+            const langText = ref('curl');
+            const langImage = ref('curl-url');
+            const langFile = ref('curl-url');
+            const langStatus = ref('curl');
+            const selectedToken = ref('');
+
+            const apiBaseUrl = computed(() => {
+                return window.location.origin + window.location.pathname.replace(/\/[^\/]*$/, '') + '/api.php';
+            });
+
+            const tokenToUse = computed(() => selectedToken.value || 'YOUR_SESSION_TOKEN');
+
+            watch(sessions, (newVal) => {
+                if (newVal && newVal.length > 0 && !selectedToken.value) {
+                    selectedToken.value = newVal[0].session_id;
+                }
+            }, { immediate: true });
+
+            // Code Snippets computed properties
+            const curlTextSnippet = computed(() => `curl -X POST "${apiBaseUrl.value}/send/text" \\
+  -H "Authorization: Bearer ${tokenToUse.value}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "to": "628123456789",
+    "message": "Hello from API!"
+  }'`);
+
+            const phpTextSnippet = computed(() => `<?php
+$curl = curl_init();
+curl_setopt_array($curl, [
+    CURLOPT_URL => "${apiBaseUrl.value}/send/text",
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_CUSTOMREQUEST => "POST",
+    CURLOPT_POSTFIELDS => json_encode([
+        "to" => "628123456789",
+        "message" => "Hello from API!"
+    ]),
+    CURLOPT_HTTPHEADER => [
+        "Authorization: Bearer ${tokenToUse.value}",
+        "Content-Type: application/json"
+    ],
+]);
+$response = curl_exec($curl);
+curl_close($curl);
+echo $response;`);
+
+            const curlImageUrlSnippet = computed(() => `curl -X POST "${apiBaseUrl.value}/send/image" \\
+  -H "Authorization: Bearer ${tokenToUse.value}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "to": "628123456789",
+    "caption": "Check this image",
+    "url": "https://example.com/image.jpg"
+  }'`);
+
+            const curlImageFileSnippet = computed(() => `curl -X POST "${apiBaseUrl.value}/send/image" \\
+  -H "Authorization: Bearer ${tokenToUse.value}" \\
+  -F "to=628123456789" \\
+  -F "caption=My Uploaded Image" \\
+  -F "file=@/path/to/image.jpg"`);
+
+            const phpImageUrlSnippet = computed(() => `<?php
+$curl = curl_init();
+curl_setopt_array($curl, [
+    CURLOPT_URL => "${apiBaseUrl.value}/send/image",
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_CUSTOMREQUEST => "POST",
+    CURLOPT_POSTFIELDS => json_encode([
+        "to" => "628123456789",
+        "caption" => "Check this image",
+        "url" => "https://example.com/image.jpg"
+    ]),
+    CURLOPT_HTTPHEADER => [
+        "Authorization: Bearer ${tokenToUse.value}",
+        "Content-Type: application/json"
+    ],
+]);
+$response = curl_exec($curl);
+curl_close($curl);
+echo $response;`);
+
+            const phpImageFileSnippet = computed(() => `<?php
+$curl = curl_init();
+curl_setopt_array($curl, [
+    CURLOPT_URL => "${apiBaseUrl.value}/send/image",
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_CUSTOMREQUEST => "POST",
+    CURLOPT_POSTFIELDS => [
+        "to" => "628123456789",
+        "caption" => "My Uploaded Image",
+        "file" => new CURLFile('/path/to/image.jpg', 'image/jpeg')
+    ],
+    CURLOPT_HTTPHEADER => [
+        "Authorization: Bearer ${tokenToUse.value}"
+    ],
+]);
+$response = curl_exec($curl);
+curl_close($curl);
+echo $response;`);
+
+            const curlFileUrlSnippet = computed(() => `curl -X POST "${apiBaseUrl.value}/send/file" \\
+  -H "Authorization: Bearer ${tokenToUse.value}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "to": "628123456789",
+    "caption": "Receipt.pdf",
+    "filename": "receipt.pdf",
+    "url": "https://example.com/doc.pdf"
+  }'`);
+
+            const curlFileFileSnippet = computed(() => `curl -X POST "${apiBaseUrl.value}/send/file" \\
+  -H "Authorization: Bearer ${tokenToUse.value}" \\
+  -F "to=628123456789" \\
+  -F "caption=Invoice PDF" \\
+  -F "filename=invoice.pdf" \\
+  -F "file=@/path/to/document.pdf"`);
+
+            const phpFileUrlSnippet = computed(() => `<?php
+$curl = curl_init();
+curl_setopt_array($curl, [
+    CURLOPT_URL => "${apiBaseUrl.value}/send/file",
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_CUSTOMREQUEST => "POST",
+    CURLOPT_POSTFIELDS => json_encode([
+        "to" => "628123456789",
+        "caption" => "Receipt.pdf",
+        "filename" => "receipt.pdf",
+        "url" => "https://example.com/doc.pdf"
+    ]),
+    CURLOPT_HTTPHEADER => [
+        "Authorization: Bearer ${tokenToUse.value}",
+        "Content-Type: application/json"
+    ],
+]);
+$response = curl_exec($curl);
+curl_close($curl);
+echo $response;`);
+
+            const phpFileFileSnippet = computed(() => `<?php
+$curl = curl_init();
+curl_setopt_array($curl, [
+    CURLOPT_URL => "${apiBaseUrl.value}/send/file",
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_CUSTOMREQUEST => "POST",
+    CURLOPT_POSTFIELDS => [
+        "to" => "628123456789",
+        "caption" => "Invoice PDF",
+        "filename" => "invoice.pdf",
+        "file" => new CURLFile('/path/to/document.pdf', 'application/pdf')
+    ],
+    CURLOPT_HTTPHEADER => [
+        "Authorization: Bearer ${tokenToUse.value}"
+    ],
+]);
+$response = curl_exec($curl);
+curl_close($curl);
+echo $response;`);
+
+            const curlStatusSnippet = computed(() => `curl -X GET "${apiBaseUrl.value}/sessions" \\
+  -H "Authorization: Bearer ${tokenToUse.value}"`);
+
+            const phpStatusSnippet = computed(() => `<?php
+$curl = curl_init();
+curl_setopt_array($curl, [
+    CURLOPT_URL => "${apiBaseUrl.value}/sessions",
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_CUSTOMREQUEST => "GET",
+    CURLOPT_HTTPHEADER => [
+        "Authorization: Bearer ${tokenToUse.value}"
+    ],
+]);
+$response = curl_exec($curl);
+curl_close($curl);
+echo $response;`);
+
             // Add dialog
             const addDialog    = ref(false);
             const newSessionId = ref('');
@@ -505,6 +913,14 @@
                 });
             };
 
+            const copyToClipboard = (text) => {
+                navigator.clipboard.writeText(text).then(() => {
+                    store.commit('SHOW_SNACK', { text: 'Snippet copied to clipboard!', color: 'info' });
+                }).catch(() => {
+                    store.commit('SHOW_SNACK', { text: 'Copy failed.', color: 'error' });
+                });
+            };
+
             onMounted(() => store.dispatch('loadSessions'));
             onUnmounted(() => store.dispatch('stopAllPolling'));
 
@@ -512,6 +928,11 @@
                 sessions, maxSessions, loading, snackbar,
                 authUser, logoutLoading, doLogout,
                 regenerateSessionId,
+                activeTab, subTab, langText, langImage, langFile, langStatus, selectedToken, apiBaseUrl, tokenToUse,
+                curlTextSnippet, phpTextSnippet,
+                curlImageUrlSnippet, curlImageFileSnippet, phpImageUrlSnippet, phpImageFileSnippet,
+                curlFileUrlSnippet, curlFileFileSnippet, phpFileUrlSnippet, phpFileFileSnippet,
+                curlStatusSnippet, phpStatusSnippet, copyToClipboard,
                 addDialog, newSessionId, newLabel, addLoading, openAddDialog, submitAdd,
                 deleteDialog, deleteTarget, confirmDelete, doDelete,
                 reconnect, reload, copyToken,
