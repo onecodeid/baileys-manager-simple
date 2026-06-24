@@ -38,7 +38,8 @@
     const { createVuetify } = Vuetify;
     const { createStore }   = Vuex;
 
-    const API = '/baileys-proxy.php';
+    // Use a path relative to this page so it works in any subdirectory
+    const API = 'baileys-proxy.php';
     const MAX = 10;
 
     // -------------------------------------------------------------------------
