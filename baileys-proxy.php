@@ -243,6 +243,7 @@ if ($method === 'GET' && preg_match('#^/api/session/status/(.+)$#', $path, $m)) 
     }
 
     // Node offline — return DB record as fallback
+    $dbError = null;
     try {
         $row = db()->prepare('SELECT * FROM whats_app_sessions WHERE name = :n LIMIT 1');
         $row->execute([':n' => $sessionId]);
@@ -250,10 +251,17 @@ if ($method === 'GET' && preg_match('#^/api/session/status/(.+)$#', $path, $m)) 
         if ($r) {
             jsonOut(200, ['status' => strtoupper($r['status']), 'phone' => $r['phone_number']]);
         }
-    } catch (Exception $e) {}
+    } catch (Exception $e) {
+        $dbError = $e->getMessage();
+    }
 
     http_response_code($nr['status'] ?: 502);
-    echo $nr['raw'] ?: json_encode(['error' => 'Baileys offline']);
+    echo $nr['raw'] ?: json_encode([
+        'error'    => 'Baileys offline',
+        'detail'   => $nr['error'] ?: 'Unknown cURL error',
+        'db_error' => $dbError ?: 'Session not found in database',
+        'target'   => BAILEYS_BASE . '/api/session/status/' . $sessionId
+    ], JSON_UNESCAPED_SLASHES);
     exit;
 }
 
