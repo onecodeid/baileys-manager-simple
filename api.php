@@ -121,11 +121,8 @@ function baileysRequest(string $path, string $method = 'POST', array $curlOpts =
  * Normalise a WhatsApp number: strip leading + and append @s.whatsapp.net
  */
 function normaliseJid(string $to): string {
-    $to = preg_replace('/\D/', '', $to);   // digits only
-    if (!str_ends_with($to, '@s.whatsapp.net')) {
-        $to .= '@s.whatsapp.net';
-    }
-    return $to;
+    $to = preg_replace('/\D/', '', $to);
+    return $to . '@s.whatsapp.net';
 }
 
 /**
@@ -181,8 +178,8 @@ if ($method === 'GET' && $pathInfo === '/sessions') {
 
 // ── Shared: parse body ────────────────────────────────────────────────────────
 $contentType = strtolower($_SERVER['CONTENT_TYPE'] ?? '');
-$isJson      = str_contains($contentType, 'application/json');
-$isMultipart = str_contains($contentType, 'multipart/form-data');
+$isJson      = strpos($contentType, 'application/json') !== false;
+$isMultipart = strpos($contentType, 'multipart/form-data') !== false;
 
 if ($isJson) {
     $body = json_decode(file_get_contents('php://input'), true) ?? [];
