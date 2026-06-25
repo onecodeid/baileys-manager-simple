@@ -385,7 +385,7 @@ if (empty($_SESSION['user_id'])) {
                 <div class="text-body-2 mb-4">
                   All REST endpoints require authentication using the Session Token as a Bearer token.
                 </div>
-                
+
                 <v-alert type="info" variant="tonal" class="mb-4 text-caption" density="compact">
                   <strong>Header Format:</strong><br>
                   <code>Authorization: Bearer &lt;token&gt;</code>
@@ -426,14 +426,14 @@ if (empty($_SESSION['user_id'])) {
 
                 <v-card-text>
                   <v-window v-model="subTab">
-                    
+
                     <!-- Send Text -->
                     <v-window-item value="send-text">
                       <div class="text-subtitle-1 font-weight-bold mb-1">Send Text Message</div>
                       <div class="text-body-2 text-grey-darken-1 mb-4">
                         Sends a plain text message to a specific WhatsApp number. JID phone numbers automatically handle trailing <code>@s.whatsapp.net</code>.
                       </div>
-                      
+
                       <v-chip class="mb-4 font-weight-bold" color="success" size="small">POST</v-chip>
                       <code class="text-body-2 font-weight-bold ml-2">{{ apiBaseUrl }}/send/text</code>
 
@@ -667,13 +667,16 @@ if (empty($_SESSION['user_id'])) {
             const authUser = ref(window.__authUser || { name: '...', email: '' });
 
             // Navigation tabs
-            const activeTab = ref('sessions');
-            const subTab = ref('send-text');
-            const langText = ref('curl');
-            const langImage = ref('curl-url');
-            const langFile = ref('curl-url');
+            const activeTab  = ref('sessions');
+            const subTab     = ref('send-text');
+            const langText   = ref('curl');
+            const langImage  = ref('curl-url');
+            const langFile   = ref('curl-url');
             const langStatus = ref('curl');
             const selectedToken = ref('');
+
+            // ── FIX: use a variable so PHP 7.4 does not parse the opening tag ──
+            const phpOpen = '<' + '?php';
 
             const apiBaseUrl = computed(() => {
                 return window.location.origin + window.location.pathname.replace(/\/[^\/]*$/, '') + '/api.php';
@@ -687,182 +690,206 @@ if (empty($_SESSION['user_id'])) {
                 }
             }, { immediate: true });
 
-            // Code Snippets computed properties
-            const curlTextSnippet = computed(() => `curl -X POST "${apiBaseUrl.value}/send/text" \\
-  -H "Authorization: Bearer ${tokenToUse.value}" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "to": "628123456789",
-    "message": "Hello from API!"
-  }'`);
+            // ── Code Snippets ──────────────────────────────────────────────────
 
-            const phpTextSnippet = computed(() => `<?php
-$curl = curl_init();
-curl_setopt_array($curl, [
-    CURLOPT_URL => "${apiBaseUrl.value}/send/text",
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_CUSTOMREQUEST => "POST",
-    CURLOPT_POSTFIELDS => json_encode([
-        "to" => "628123456789",
-        "message" => "Hello from API!"
-    ]),
-    CURLOPT_HTTPHEADER => [
-        "Authorization: Bearer ${tokenToUse.value}",
-        "Content-Type: application/json"
-    ],
-]);
-$response = curl_exec($curl);
-curl_close($curl);
-echo $response;`);
+            const curlTextSnippet = computed(() =>
+                'curl -X POST "' + apiBaseUrl.value + '/send/text" \\\n' +
+                '  -H "Authorization: Bearer ' + tokenToUse.value + '" \\\n' +
+                '  -H "Content-Type: application/json" \\\n' +
+                '  -d \'{\n' +
+                '    "to": "628123456789",\n' +
+                '    "message": "Hello from API!"\n' +
+                '  }\''
+            );
 
-            const curlImageUrlSnippet = computed(() => `curl -X POST "${apiBaseUrl.value}/send/image" \\
-  -H "Authorization: Bearer ${tokenToUse.value}" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "to": "628123456789",
-    "caption": "Check this image",
-    "url": "https://example.com/image.jpg"
-  }'`);
+            const phpTextSnippet = computed(() =>
+                phpOpen + '\n' +
+                '$curl = curl_init();\n' +
+                'curl_setopt_array($curl, [\n' +
+                '    CURLOPT_URL => "' + apiBaseUrl.value + '/send/text",\n' +
+                '    CURLOPT_RETURNTRANSFER => true,\n' +
+                '    CURLOPT_CUSTOMREQUEST => "POST",\n' +
+                '    CURLOPT_POSTFIELDS => json_encode([\n' +
+                '        "to" => "628123456789",\n' +
+                '        "message" => "Hello from API!"\n' +
+                '    ]),\n' +
+                '    CURLOPT_HTTPHEADER => [\n' +
+                '        "Authorization: Bearer ' + tokenToUse.value + '",\n' +
+                '        "Content-Type: application/json"\n' +
+                '    ],\n' +
+                ']);\n' +
+                '$response = curl_exec($curl);\n' +
+                'curl_close($curl);\n' +
+                'echo $response;'
+            );
 
-            const curlImageFileSnippet = computed(() => `curl -X POST "${apiBaseUrl.value}/send/image" \\
-  -H "Authorization: Bearer ${tokenToUse.value}" \\
-  -F "to=628123456789" \\
-  -F "caption=My Uploaded Image" \\
-  -F "file=@/path/to/image.jpg"`);
+            const curlImageUrlSnippet = computed(() =>
+                'curl -X POST "' + apiBaseUrl.value + '/send/image" \\\n' +
+                '  -H "Authorization: Bearer ' + tokenToUse.value + '" \\\n' +
+                '  -H "Content-Type: application/json" \\\n' +
+                '  -d \'{\n' +
+                '    "to": "628123456789",\n' +
+                '    "caption": "Check this image",\n' +
+                '    "url": "https://example.com/image.jpg"\n' +
+                '  }\''
+            );
 
-            const phpImageUrlSnippet = computed(() => `<?php
-$curl = curl_init();
-curl_setopt_array($curl, [
-    CURLOPT_URL => "${apiBaseUrl.value}/send/image",
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_CUSTOMREQUEST => "POST",
-    CURLOPT_POSTFIELDS => json_encode([
-        "to" => "628123456789",
-        "caption" => "Check this image",
-        "url" => "https://example.com/image.jpg"
-    ]),
-    CURLOPT_HTTPHEADER => [
-        "Authorization: Bearer ${tokenToUse.value}",
-        "Content-Type: application/json"
-    ],
-]);
-$response = curl_exec($curl);
-curl_close($curl);
-echo $response;`);
+            const curlImageFileSnippet = computed(() =>
+                'curl -X POST "' + apiBaseUrl.value + '/send/image" \\\n' +
+                '  -H "Authorization: Bearer ' + tokenToUse.value + '" \\\n' +
+                '  -F "to=628123456789" \\\n' +
+                '  -F "caption=My Uploaded Image" \\\n' +
+                '  -F "file=@/path/to/image.jpg"'
+            );
 
-            const phpImageFileSnippet = computed(() => `<?php
-$curl = curl_init();
-curl_setopt_array($curl, [
-    CURLOPT_URL => "${apiBaseUrl.value}/send/image",
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_CUSTOMREQUEST => "POST",
-    CURLOPT_POSTFIELDS => [
-        "to" => "628123456789",
-        "caption" => "My Uploaded Image",
-        "file" => new CURLFile('/path/to/image.jpg', 'image/jpeg')
-    ],
-    CURLOPT_HTTPHEADER => [
-        "Authorization: Bearer ${tokenToUse.value}"
-    ],
-]);
-$response = curl_exec($curl);
-curl_close($curl);
-echo $response;`);
+            const phpImageUrlSnippet = computed(() =>
+                phpOpen + '\n' +
+                '$curl = curl_init();\n' +
+                'curl_setopt_array($curl, [\n' +
+                '    CURLOPT_URL => "' + apiBaseUrl.value + '/send/image",\n' +
+                '    CURLOPT_RETURNTRANSFER => true,\n' +
+                '    CURLOPT_CUSTOMREQUEST => "POST",\n' +
+                '    CURLOPT_POSTFIELDS => json_encode([\n' +
+                '        "to" => "628123456789",\n' +
+                '        "caption" => "Check this image",\n' +
+                '        "url" => "https://example.com/image.jpg"\n' +
+                '    ]),\n' +
+                '    CURLOPT_HTTPHEADER => [\n' +
+                '        "Authorization: Bearer ' + tokenToUse.value + '",\n' +
+                '        "Content-Type: application/json"\n' +
+                '    ],\n' +
+                ']);\n' +
+                '$response = curl_exec($curl);\n' +
+                'curl_close($curl);\n' +
+                'echo $response;'
+            );
 
-            const curlFileUrlSnippet = computed(() => `curl -X POST "${apiBaseUrl.value}/send/file" \\
-  -H "Authorization: Bearer ${tokenToUse.value}" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "to": "628123456789",
-    "caption": "Receipt.pdf",
-    "filename": "receipt.pdf",
-    "url": "https://example.com/doc.pdf"
-  }'`);
+            const phpImageFileSnippet = computed(() =>
+                phpOpen + '\n' +
+                '$curl = curl_init();\n' +
+                'curl_setopt_array($curl, [\n' +
+                '    CURLOPT_URL => "' + apiBaseUrl.value + '/send/image",\n' +
+                '    CURLOPT_RETURNTRANSFER => true,\n' +
+                '    CURLOPT_CUSTOMREQUEST => "POST",\n' +
+                '    CURLOPT_POSTFIELDS => [\n' +
+                '        "to" => "628123456789",\n' +
+                '        "caption" => "My Uploaded Image",\n' +
+                '        "file" => new CURLFile(\'/path/to/image.jpg\', \'image/jpeg\')\n' +
+                '    ],\n' +
+                '    CURLOPT_HTTPHEADER => [\n' +
+                '        "Authorization: Bearer ' + tokenToUse.value + '"\n' +
+                '    ],\n' +
+                ']);\n' +
+                '$response = curl_exec($curl);\n' +
+                'curl_close($curl);\n' +
+                'echo $response;'
+            );
 
-            const curlFileFileSnippet = computed(() => `curl -X POST "${apiBaseUrl.value}/send/file" \\
-  -H "Authorization: Bearer ${tokenToUse.value}" \\
-  -F "to=628123456789" \\
-  -F "caption=Invoice PDF" \\
-  -F "filename=invoice.pdf" \\
-  -F "file=@/path/to/document.pdf"`);
+            const curlFileUrlSnippet = computed(() =>
+                'curl -X POST "' + apiBaseUrl.value + '/send/file" \\\n' +
+                '  -H "Authorization: Bearer ' + tokenToUse.value + '" \\\n' +
+                '  -H "Content-Type: application/json" \\\n' +
+                '  -d \'{\n' +
+                '    "to": "628123456789",\n' +
+                '    "caption": "Receipt.pdf",\n' +
+                '    "filename": "receipt.pdf",\n' +
+                '    "url": "https://example.com/doc.pdf"\n' +
+                '  }\''
+            );
 
-            const phpFileUrlSnippet = computed(() => `<?php
-$curl = curl_init();
-curl_setopt_array($curl, [
-    CURLOPT_URL => "${apiBaseUrl.value}/send/file",
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_CUSTOMREQUEST => "POST",
-    CURLOPT_POSTFIELDS => json_encode([
-        "to" => "628123456789",
-        "caption" => "Receipt.pdf",
-        "filename" => "receipt.pdf",
-        "url" => "https://example.com/doc.pdf"
-    ]),
-    CURLOPT_HTTPHEADER => [
-        "Authorization: Bearer ${tokenToUse.value}",
-        "Content-Type: application/json"
-    ],
-]);
-$response = curl_exec($curl);
-curl_close($curl);
-echo $response;`);
+            const curlFileFileSnippet = computed(() =>
+                'curl -X POST "' + apiBaseUrl.value + '/send/file" \\\n' +
+                '  -H "Authorization: Bearer ' + tokenToUse.value + '" \\\n' +
+                '  -F "to=628123456789" \\\n' +
+                '  -F "caption=Invoice PDF" \\\n' +
+                '  -F "filename=invoice.pdf" \\\n' +
+                '  -F "file=@/path/to/document.pdf"'
+            );
 
-            const phpFileFileSnippet = computed(() => `<?php
-$curl = curl_init();
-curl_setopt_array($curl, [
-    CURLOPT_URL => "${apiBaseUrl.value}/send/file",
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_CUSTOMREQUEST => "POST",
-    CURLOPT_POSTFIELDS => [
-        "to" => "628123456789",
-        "caption" => "Invoice PDF",
-        "filename" => "invoice.pdf",
-        "file" => new CURLFile('/path/to/document.pdf', 'application/pdf')
-    ],
-    CURLOPT_HTTPHEADER => [
-        "Authorization: Bearer ${tokenToUse.value}"
-    ],
-]);
-$response = curl_exec($curl);
-curl_close($curl);
-echo $response;`);
+            const phpFileUrlSnippet = computed(() =>
+                phpOpen + '\n' +
+                '$curl = curl_init();\n' +
+                'curl_setopt_array($curl, [\n' +
+                '    CURLOPT_URL => "' + apiBaseUrl.value + '/send/file",\n' +
+                '    CURLOPT_RETURNTRANSFER => true,\n' +
+                '    CURLOPT_CUSTOMREQUEST => "POST",\n' +
+                '    CURLOPT_POSTFIELDS => json_encode([\n' +
+                '        "to" => "628123456789",\n' +
+                '        "caption" => "Receipt.pdf",\n' +
+                '        "filename" => "receipt.pdf",\n' +
+                '        "url" => "https://example.com/doc.pdf"\n' +
+                '    ]),\n' +
+                '    CURLOPT_HTTPHEADER => [\n' +
+                '        "Authorization: Bearer ' + tokenToUse.value + '",\n' +
+                '        "Content-Type: application/json"\n' +
+                '    ],\n' +
+                ']);\n' +
+                '$response = curl_exec($curl);\n' +
+                'curl_close($curl);\n' +
+                'echo $response;'
+            );
 
-            const curlStatusSnippet = computed(() => `curl -X GET "${apiBaseUrl.value}/sessions" \\
-  -H "Authorization: Bearer ${tokenToUse.value}"`);
+            const phpFileFileSnippet = computed(() =>
+                phpOpen + '\n' +
+                '$curl = curl_init();\n' +
+                'curl_setopt_array($curl, [\n' +
+                '    CURLOPT_URL => "' + apiBaseUrl.value + '/send/file",\n' +
+                '    CURLOPT_RETURNTRANSFER => true,\n' +
+                '    CURLOPT_CUSTOMREQUEST => "POST",\n' +
+                '    CURLOPT_POSTFIELDS => [\n' +
+                '        "to" => "628123456789",\n' +
+                '        "caption" => "Invoice PDF",\n' +
+                '        "filename" => "invoice.pdf",\n' +
+                '        "file" => new CURLFile(\'/path/to/document.pdf\', \'application/pdf\')\n' +
+                '    ],\n' +
+                '    CURLOPT_HTTPHEADER => [\n' +
+                '        "Authorization: Bearer ' + tokenToUse.value + '"\n' +
+                '    ],\n' +
+                ']);\n' +
+                '$response = curl_exec($curl);\n' +
+                'curl_close($curl);\n' +
+                'echo $response;'
+            );
 
-            const phpStatusSnippet = computed(() => `<?php
-$curl = curl_init();
-curl_setopt_array($curl, [
-    CURLOPT_URL => "${apiBaseUrl.value}/sessions",
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_CUSTOMREQUEST => "GET",
-    CURLOPT_HTTPHEADER => [
-        "Authorization: Bearer ${tokenToUse.value}"
-    ],
-]);
-$response = curl_exec($curl);
-curl_close($curl);
-echo $response;`);
+            const curlStatusSnippet = computed(() =>
+                'curl -X GET "' + apiBaseUrl.value + '/sessions" \\\n' +
+                '  -H "Authorization: Bearer ' + tokenToUse.value + '"'
+            );
 
-            // Add dialog
+            const phpStatusSnippet = computed(() =>
+                phpOpen + '\n' +
+                '$curl = curl_init();\n' +
+                'curl_setopt_array($curl, [\n' +
+                '    CURLOPT_URL => "' + apiBaseUrl.value + '/sessions",\n' +
+                '    CURLOPT_RETURNTRANSFER => true,\n' +
+                '    CURLOPT_CUSTOMREQUEST => "GET",\n' +
+                '    CURLOPT_HTTPHEADER => [\n' +
+                '        "Authorization: Bearer ' + tokenToUse.value + '"\n' +
+                '    ],\n' +
+                ']);\n' +
+                '$response = curl_exec($curl);\n' +
+                'curl_close($curl);\n' +
+                'echo $response;'
+            );
+
+            // ── Add dialog ─────────────────────────────────────────────────────
             const addDialog    = ref(false);
             const newSessionId = ref('');
             const newLabel     = ref('');
             const addLoading   = ref(false);
 
-            // Generate a random 32-char hex token (like MD5)
             const genSessionId = () => {
                 const arr = new Uint8Array(16);
                 crypto.getRandomValues(arr);
-                return Array.from(arr).map(b => b.toString(16).padStart(2,'0')).join('');
+                return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
             };
             const regenerateSessionId = () => { newSessionId.value = genSessionId(); };
 
-            // Delete dialog
+            // ── Delete dialog ──────────────────────────────────────────────────
             const deleteDialog = ref(false);
             const deleteTarget = ref(null);
 
-            // Logout
+            // ── Logout ─────────────────────────────────────────────────────────
             const logoutLoading = ref(false);
             const doLogout = async () => {
                 logoutLoading.value = true;
@@ -925,11 +952,15 @@ echo $response;`);
                 sessions, maxSessions, loading, snackbar,
                 authUser, logoutLoading, doLogout,
                 regenerateSessionId,
-                activeTab, subTab, langText, langImage, langFile, langStatus, selectedToken, apiBaseUrl, tokenToUse,
+                activeTab, subTab, langText, langImage, langFile, langStatus,
+                selectedToken, apiBaseUrl, tokenToUse,
                 curlTextSnippet, phpTextSnippet,
-                curlImageUrlSnippet, curlImageFileSnippet, phpImageUrlSnippet, phpImageFileSnippet,
-                curlFileUrlSnippet, curlFileFileSnippet, phpFileUrlSnippet, phpFileFileSnippet,
-                curlStatusSnippet, phpStatusSnippet, copyToClipboard,
+                curlImageUrlSnippet, curlImageFileSnippet,
+                phpImageUrlSnippet, phpImageFileSnippet,
+                curlFileUrlSnippet, curlFileFileSnippet,
+                phpFileUrlSnippet, phpFileFileSnippet,
+                curlStatusSnippet, phpStatusSnippet,
+                copyToClipboard,
                 addDialog, newSessionId, newLabel, addLoading, openAddDialog, submitAdd,
                 deleteDialog, deleteTarget, confirmDelete, doDelete,
                 reconnect, reload, copyToken,
