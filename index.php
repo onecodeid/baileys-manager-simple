@@ -246,6 +246,9 @@ if (empty($_SESSION['user_id'])) {
         <v-tab value="tutorial" prepend-icon="mdi-code-json">
           API Tutorial &amp; Code Examples
         </v-tab>
+        <v-tab value="playground" prepend-icon="mdi-flask-outline">
+          Playground
+        </v-tab>
       </v-tabs>
 
       <!-- Tabs Windows -->
@@ -583,6 +586,202 @@ if (empty($_SESSION['user_id'])) {
                 </v-card-text>
               </v-card>
             </v-col>
+          </v-row>
+        </v-window-item>
+
+        <!-- Tab 3: Playground -->
+        <v-window-item value="playground">
+          <v-row>
+
+            <!-- Left: Form -->
+            <v-col cols="12" md="5" lg="4">
+              <v-card class="rounded-lg pa-4" elevation="2">
+                <div class="text-subtitle-1 font-weight-bold mb-4">
+                  <v-icon icon="mdi-flask-outline" class="mr-2" color="purple"></v-icon>Live Send Test
+                </div>
+
+                <!-- Session token selector -->
+                <v-select
+                  v-model="pgToken"
+                  :items="sessions"
+                  item-title="label"
+                  item-value="session_id"
+                  label="Session (Token)"
+                  variant="outlined"
+                  density="compact"
+                  class="mb-3"
+                  no-data-text="No sessions available"
+                  prepend-inner-icon="mdi-key-variant"
+                ></v-select>
+
+                <!-- Recipient -->
+                <v-text-field
+                  v-model="pgTo"
+                  label="To (phone number)"
+                  placeholder="628123456789"
+                  variant="outlined"
+                  density="compact"
+                  class="mb-3"
+                  prepend-inner-icon="mdi-phone"
+                  hint="Country code without + (e.g. 628123456789)"
+                  persistent-hint
+                ></v-text-field>
+
+                <!-- Message type tabs -->
+                <v-tabs v-model="pgType" color="purple" density="compact" class="mb-4 border-b">
+                  <v-tab value="text" prepend-icon="mdi-message-text">Text</v-tab>
+                  <v-tab value="image" prepend-icon="mdi-image">Image</v-tab>
+                  <v-tab value="file" prepend-icon="mdi-file-document">File</v-tab>
+                </v-tabs>
+
+                <!-- Text fields -->
+                <div v-if="pgType === 'text'">
+                  <v-textarea
+                    v-model="pgMessage"
+                    label="Message"
+                    variant="outlined"
+                    density="compact"
+                    rows="4"
+                    class="mb-3"
+                    counter
+                  ></v-textarea>
+                </div>
+
+                <!-- Image fields -->
+                <div v-if="pgType === 'image'">
+                  <v-tabs v-model="pgImageMode" density="compact" color="success" class="mb-3">
+                    <v-tab value="url">URL</v-tab>
+                    <v-tab value="upload">Upload</v-tab>
+                  </v-tabs>
+                  <v-text-field
+                    v-if="pgImageMode === 'url'"
+                    v-model="pgMediaUrl"
+                    label="Image URL"
+                    placeholder="https://example.com/image.jpg"
+                    variant="outlined"
+                    density="compact"
+                    class="mb-3"
+                    prepend-inner-icon="mdi-link"
+                  ></v-text-field>
+                  <div v-if="pgImageMode === 'upload'" class="mb-3">
+                    <v-file-input
+                      v-model="pgFile"
+                      label="Choose image"
+                      accept="image/*"
+                      variant="outlined"
+                      density="compact"
+                      prepend-icon=""
+                      prepend-inner-icon="mdi-image-plus"
+                      show-size
+                    ></v-file-input>
+                    <v-img v-if="pgFilePreview" :src="pgFilePreview" max-height="140" class="rounded mb-2 elevation-1"></v-img>
+                  </div>
+                  <v-text-field
+                    v-model="pgCaption"
+                    label="Caption (optional)"
+                    variant="outlined"
+                    density="compact"
+                    class="mb-3"
+                  ></v-text-field>
+                </div>
+
+                <!-- File/document fields -->
+                <div v-if="pgType === 'file'">
+                  <v-tabs v-model="pgFileMode" density="compact" color="success" class="mb-3">
+                    <v-tab value="url">URL</v-tab>
+                    <v-tab value="upload">Upload</v-tab>
+                  </v-tabs>
+                  <v-text-field
+                    v-if="pgFileMode === 'url'"
+                    v-model="pgMediaUrl"
+                    label="File URL"
+                    placeholder="https://example.com/doc.pdf"
+                    variant="outlined"
+                    density="compact"
+                    class="mb-3"
+                    prepend-inner-icon="mdi-link"
+                  ></v-text-field>
+                  <div v-if="pgFileMode === 'upload'" class="mb-3">
+                    <v-file-input
+                      v-model="pgFile"
+                      label="Choose file"
+                      variant="outlined"
+                      density="compact"
+                      prepend-icon=""
+                      prepend-inner-icon="mdi-paperclip"
+                      show-size
+                    ></v-file-input>
+                  </div>
+                  <v-text-field
+                    v-model="pgFilename"
+                    label="Filename (optional)"
+                    placeholder="document.pdf"
+                    variant="outlined"
+                    density="compact"
+                    class="mb-3"
+                  ></v-text-field>
+                  <v-text-field
+                    v-model="pgCaption"
+                    label="Caption (optional)"
+                    variant="outlined"
+                    density="compact"
+                    class="mb-3"
+                  ></v-text-field>
+                </div>
+
+                <v-btn
+                  color="purple"
+                  variant="flat"
+                  block
+                  size="large"
+                  :loading="pgLoading"
+                  :disabled="!pgToken || !pgTo"
+                  prepend-icon="mdi-send"
+                  @click="pgSend"
+                >Send</v-btn>
+              </v-card>
+            </v-col>
+
+            <!-- Right: Response log -->
+            <v-col cols="12" md="7" lg="8">
+              <v-card class="rounded-lg" elevation="2" min-height="400">
+                <v-card-title class="text-subtitle-1 font-weight-bold pa-4 d-flex align-center">
+                  <v-icon icon="mdi-console" class="mr-2" color="grey-darken-2"></v-icon>
+                  Response Log
+                  <v-spacer></v-spacer>
+                  <v-btn size="small" variant="text" color="grey" prepend-icon="mdi-delete-sweep" @click="pgLogs = []">Clear</v-btn>
+                </v-card-title>
+                <v-divider></v-divider>
+
+                <div v-if="pgLogs.length === 0" class="d-flex align-center justify-center" style="min-height:300px;">
+                  <div class="text-center text-grey">
+                    <v-icon icon="mdi-console-line" size="48" color="grey-lighten-2" class="mb-3"></v-icon>
+                    <p class="text-body-2">Responses will appear here after you send.</p>
+                  </div>
+                </div>
+
+                <v-list v-else lines="three" class="pa-2">
+                  <v-list-item
+                    v-for="(log, i) in pgLogs"
+                    :key="i"
+                    class="mb-2 rounded"
+                    :class="log.ok ? 'bg-green-lighten-5' : 'bg-red-lighten-5'"
+                  >
+                    <template v-slot:prepend>
+                      <v-icon :icon="log.ok ? 'mdi-check-circle' : 'mdi-alert-circle'" :color="log.ok ? 'success' : 'error'" class="mt-1"></v-icon>
+                    </template>
+                    <v-list-item-title class="text-caption font-weight-bold mb-1">
+                      {{ log.time }} &nbsp;|&nbsp; {{ log.type.toUpperCase() }} → {{ log.to }}
+                      <v-chip size="x-small" :color="log.ok ? 'success' : 'error'" class="ml-2">{{ log.status }}</v-chip>
+                    </v-list-item-title>
+                    <v-list-item-subtitle>
+                      <v-sheet class="pa-2 rounded mt-1 text-caption" style="font-family:monospace;white-space:pre-wrap;word-break:break-all;background:rgba(0,0,0,.04);max-height:160px;overflow:auto;">{{ log.body }}</v-sheet>
+                    </v-list-item-subtitle>
+                  </v-list-item>
+                </v-list>
+              </v-card>
+            </v-col>
+
           </v-row>
         </v-window-item>
 
@@ -945,6 +1144,113 @@ if (empty($_SESSION['user_id'])) {
                 });
             };
 
+            // ── Playground ─────────────────────────────────────────────────────
+            const pgToken     = ref('');
+            const pgTo        = ref('');
+            const pgType      = ref('text');
+            const pgImageMode = ref('url');
+            const pgFileMode  = ref('url');
+            const pgMessage   = ref('');
+            const pgMediaUrl  = ref('');
+            const pgCaption   = ref('');
+            const pgFilename  = ref('');
+            const pgFile      = ref(null);
+            const pgFilePreview = ref('');
+            const pgLoading   = ref(false);
+            const pgLogs      = ref([]);
+
+            // Watch file selection to generate image preview
+            watch(pgFile, (f) => {
+                if (f && pgType.value === 'image') {
+                    const reader = new FileReader();
+                    reader.onload = e => { pgFilePreview.value = e.target.result; };
+                    reader.readAsDataURL(f);
+                } else {
+                    pgFilePreview.value = '';
+                }
+            });
+
+            // Reset media fields when type changes
+            watch(pgType, () => {
+                pgMediaUrl.value = '';
+                pgCaption.value  = '';
+                pgFilename.value = '';
+                pgFile.value     = null;
+                pgFilePreview.value = '';
+                pgImageMode.value = 'url';
+                pgFileMode.value  = 'url';
+            });
+
+            const pgSend = async () => {
+                pgLoading.value = true;
+                const now = new Date().toLocaleTimeString();
+                let status = 0, body = '';
+
+                try {
+                    const useUpload = (pgType.value === 'image' && pgImageMode.value === 'upload') ||
+                                      (pgType.value === 'file'  && pgFileMode.value  === 'upload');
+
+                    let res;
+
+                    if (useUpload && pgFile.value) {
+                        // multipart upload → go through playground-proxy.php
+                        const fd = new FormData();
+                        fd.append('token',   pgToken.value);
+                        fd.append('to',      pgTo.value);
+                        fd.append('type',    pgType.value);
+                        fd.append('caption', pgCaption.value);
+                        fd.append('filename', pgFilename.value || pgFile.value.name);
+                        fd.append('file',    pgFile.value);
+                        res = await fetch('playground-proxy.php', { method: 'POST', body: fd });
+                    } else {
+                        // JSON send via baileys-proxy.php
+                        const endpoint = pgType.value === 'text'  ? '/api/send/text'  :
+                                         pgType.value === 'image' ? '/api/send/image' : '/api/send/file';
+                        const payload = { to: pgTo.value };
+                        if (pgType.value === 'text') {
+                            payload.message = pgMessage.value;
+                        } else {
+                            payload.url     = pgMediaUrl.value;
+                            payload.caption = pgCaption.value;
+                            if (pgType.value === 'file') payload.filename = pgFilename.value;
+                        }
+                        res = await fetch(API + '?path=' + endpoint, {
+                            method:  'POST',
+                            headers: {
+                                'Content-Type':  'application/json',
+                                'Authorization': 'Bearer ' + pgToken.value
+                            },
+                            body: JSON.stringify(payload)
+                        });
+                    }
+
+                    status = res.status;
+                    body   = await res.text();
+                    try { body = JSON.stringify(JSON.parse(body), null, 2); } catch(_) {}
+
+                } catch(e) {
+                    body = e.message;
+                }
+
+                pgLogs.value.unshift({
+                    time:   now,
+                    type:   pgType.value,
+                    to:     pgTo.value,
+                    ok:     status >= 200 && status < 300,
+                    status: status || 'ERR',
+                    body:   body
+                });
+
+                pgLoading.value = false;
+            };
+
+            // Auto-select first session for playground when sessions load
+            watch(sessions, (newVal) => {
+                if (newVal && newVal.length > 0 && !pgToken.value) {
+                    pgToken.value = newVal[0].session_id;
+                }
+            }, { immediate: true });
+
             onMounted(() => store.dispatch('loadSessions'));
             onUnmounted(() => store.dispatch('stopAllPolling'));
 
@@ -964,7 +1270,10 @@ if (empty($_SESSION['user_id'])) {
                 addDialog, newSessionId, newLabel, addLoading, openAddDialog, submitAdd,
                 deleteDialog, deleteTarget, confirmDelete, doDelete,
                 reconnect, reload, copyToken,
-                statusColor, statusIcon
+                statusColor, statusIcon,
+                pgToken, pgTo, pgType, pgImageMode, pgFileMode,
+                pgMessage, pgMediaUrl, pgCaption, pgFilename,
+                pgFile, pgFilePreview, pgLoading, pgLogs, pgSend
             };
         }
     });
