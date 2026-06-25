@@ -1,3 +1,10 @@
+<?php
+session_start();
+if (empty($_SESSION['user_id'])) {
+    header('Location: login.html');
+    exit;
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -8,23 +15,13 @@
     <link href="https://cdn.jsdelivr.net/npm/vuetify@3.5.2/dist/vuetify.min.css" rel="stylesheet">
 </head>
 <body>
-    <!-- Auth guard: redirect to login if not authenticated -->
+    <!-- Auth guard check completed in PHP. Populating global user data: -->
     <script>
-    (async () => {
-        try {
-            const res  = await fetch('auth.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'check' })
-            });
-            if (!res.ok) { window.location.href = 'login.html'; return; }
-            const data = await res.json();
-            if (!data.authenticated) { window.location.href = 'login.html'; }
-            else { window.__authUser = data.user; }
-        } catch (_) {
-            window.location.href = 'login.html';
-        }
-    })();
+    window.__authUser = <?php echo json_encode([
+        'id'    => $_SESSION['user_id'],
+        'name'  => $_SESSION['user_name'],
+        'email' => $_SESSION['user_email']
+    ]); ?>;
     </script>
 
     <div id="app"></div>

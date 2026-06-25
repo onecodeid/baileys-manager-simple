@@ -383,7 +383,7 @@
             if (data.success) {
                 btn.style.background = 'linear-gradient(135deg,#2e7d32,#43a047)';
                 btn.querySelector('.btn-text').textContent = '✓ Signed in!';
-                setTimeout(() => { window.location.href = 'index.html'; }, 600);
+                setTimeout(() => { window.location.href = 'index.php'; }, 600);
             } else {
                 showError(data.message || 'Invalid credentials.');
                 setLoading(false);
@@ -406,7 +406,7 @@
             });
             if (res.ok) {
                 const data = await res.json();
-                if (data.authenticated) window.location.href = 'index.html';
+                if (data.authenticated) window.location.href = 'index.php';
             }
         } catch (_) {}
     })();
