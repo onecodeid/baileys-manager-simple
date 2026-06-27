@@ -8,7 +8,7 @@ USE `baileys_manager`;
 
 -- Add label column (idempotent)
 ALTER TABLE `whats_app_sessions`
-    ADD COLUMN IF NOT EXISTS `label` varchar(255)
+    ADD COLUMN `label` varchar(255)
         COLLATE utf8mb4_unicode_ci DEFAULT NULL
         AFTER `name`;
 

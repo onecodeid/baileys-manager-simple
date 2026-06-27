@@ -13,7 +13,7 @@ USE `baileys_manager`;
 
 -- Add role column if not already present (idempotent)
 ALTER TABLE `users`
-    ADD COLUMN IF NOT EXISTS `role` VARCHAR(50) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'user'
+    ADD COLUMN `role` VARCHAR(50) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'user'
     AFTER `remember_token`;
 
 -- Upsert the default admin user
