@@ -9,3 +9,4 @@ s/uploads/
 .idea/
 .vscode/
 *.log
+tmp/
