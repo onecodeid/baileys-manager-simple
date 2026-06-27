@@ -4,6 +4,12 @@ if (empty($_SESSION['user_id'])) {
     header('Location: login.html');
     exit;
 }
+
+$protocol = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https://' : 'http://';
+$serverName = $_SERVER['SERVER_NAME'];
+$serverPort = $_SERVER['SERVER_PORT'];
+$portStr = ($protocol === 'http://' && $serverPort == 80) || ($protocol === 'https://' && $serverPort == 443) ? '' : ':' . $serverPort;
+$hostUrl = $protocol . $serverName . $portStr;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -971,7 +977,7 @@ if (empty($_SESSION['user_id'])) {
             const phpOpen = '<' + '?php';
 
             const apiBaseUrl = computed(() => {
-                return window.location.origin + window.location.pathname.replace(/\/[^\/]*$/, '') + '/api.php';
+                return '<?php echo $hostUrl; ?>' + window.location.pathname.replace(/\/[^\/]*$/, '') + '/api.php';
             });
 
             const tokenToUse = computed(() => selectedToken.value || 'YOUR_SESSION_TOKEN');
@@ -1287,7 +1293,7 @@ if (empty($_SESSION['user_id'])) {
                 let status = 0, body = '';
 
                 // api.php uses PATH_INFO: api.php/send/text, api.php/send/image, api.php/send/file
-                const apiBase = window.location.pathname.replace(/\/[^\/]*$/, '') + '/api.php';
+                const apiBase = apiBaseUrl.value;
 
                 try {
                     const useUpload = (pgType.value === 'image' && pgImageMode.value === 'upload') ||
