@@ -80,12 +80,27 @@ function baileysRequest(string $path, string $method = 'POST', array $curlOpts =
     $err    = curl_error($ch);
     curl_close($ch);
     if ($raw === false) {
-        return ['__curl_error' => $err, '__http_status' => 0];
+        return ['__curl_error' => $err, '__http_status' => 0, '__raw' => ''];
     }
     $decoded = json_decode($raw, true);
     if (!is_array($decoded)) $decoded = ['raw' => $raw];
     $decoded['__http_status'] = $status;
+    $decoded['__raw']         = $raw;  // keep original for error reporting
     return $decoded;
+}
+
+/**
+ * Build a meaningful error message from a Baileys response.
+ * Tries common error keys; falls back to raw body so nothing is hidden.
+ */
+function baileysErrorMsg(array $res): string {
+    foreach (['error', 'message', 'msg', 'detail', 'reason'] as $key) {
+        if (!empty($res[$key]) && is_string($res[$key])) {
+            return $res[$key];
+        }
+    }
+    $raw = isset($res['__raw']) ? $res['__raw'] : json_encode($res);
+    return 'Baileys HTTP ' . $res['__http_status'] . ': ' . mb_substr($raw, 0, 500);
 }
 
 function normaliseJid(string $to): string {
@@ -154,7 +169,7 @@ if (!$session) fail(401, 'Invalid session token.');
 // ── GET /api.php/sessions ─────────────────────────────────────────────────────
 if ($method === 'GET' && $pathInfo === '/sessions') {
     $res = baileysRequest('/api/session/status/' . urlencode($sessionToken));
-    unset($res['__http_status']);
+    unset($res['__http_status'], $res['__raw']);
     respond(200, ['success' => true, 'session' => $res]);
 }
 
@@ -188,10 +203,10 @@ if ($method === 'POST' && $pathInfo === '/send/text') {
             'X-Session-ID: ' . $sessionToken,
         ],
     ]);
-    $httpStatus = $res['__http_status']; unset($res['__http_status']);
+    $httpStatus = $res['__http_status']; unset($res['__http_status'], $res['__raw']);
     if (isset($res['__curl_error'])) fail(502, 'Baileys unreachable: ' . $res['__curl_error']);
     if ($httpStatus >= 400) fail($httpStatus >= 500 ? 502 : 400,
-        isset($res['error']) ? $res['error'] : 'Baileys error.');
+        baileysErrorMsg($res));
     respond(200, array_merge(['success' => true, 'type' => 'text', 'to' => $jid], $res));
 }
 
@@ -237,10 +252,10 @@ if ($method === 'POST' && $pathInfo === '/send/image') {
             'X-Session-ID: ' . $sessionToken,
         ],
     ]);
-    $httpStatus = $res['__http_status']; unset($res['__http_status']);
+    $httpStatus = $res['__http_status']; unset($res['__http_status'], $res['__raw']);
     if (isset($res['__curl_error'])) fail(502, 'Baileys unreachable: ' . $res['__curl_error']);
     if ($httpStatus >= 400) fail($httpStatus >= 500 ? 502 : 400,
-        isset($res['error']) ? $res['error'] : 'Baileys error.');
+        baileysErrorMsg($res));
     respond(200, array_merge(['success' => true, 'type' => 'image', 'to' => $jid], $res));
 }
 
@@ -289,10 +304,10 @@ if ($method === 'POST' && $pathInfo === '/send/file') {
             'X-Session-ID: ' . $sessionToken,
         ],
     ]);
-    $httpStatus = $res['__http_status']; unset($res['__http_status']);
+    $httpStatus = $res['__http_status']; unset($res['__http_status'], $res['__raw']);
     if (isset($res['__curl_error'])) fail(502, 'Baileys unreachable: ' . $res['__curl_error']);
     if ($httpStatus >= 400) fail($httpStatus >= 500 ? 502 : 400,
-        isset($res['error']) ? $res['error'] : 'Baileys error.');
+        baileysErrorMsg($res));
     respond(200, array_merge([
         'success'  => true,
         'type'     => 'document',
