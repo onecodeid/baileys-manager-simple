@@ -1186,6 +1186,9 @@ if (empty($_SESSION['user_id'])) {
                 const now = new Date().toLocaleTimeString();
                 let status = 0, body = '';
 
+                // api.php uses PATH_INFO: api.php/send/text, api.php/send/image, api.php/send/file
+                const apiBase = window.location.pathname.replace(/\/[^\/]*$/, '') + '/api.php';
+
                 try {
                     const useUpload = (pgType.value === 'image' && pgImageMode.value === 'upload') ||
                                       (pgType.value === 'file'  && pgFileMode.value  === 'upload');
@@ -1193,19 +1196,24 @@ if (empty($_SESSION['user_id'])) {
                     let res;
 
                     if (useUpload && pgFile.value) {
-                        // multipart upload → go through playground-proxy.php
+                        // multipart upload — send directly to api.php/send/<type> with Bearer token
+                        // api.php handles the file itself (base64 encode, forward to Baileys)
                         const fd = new FormData();
-                        fd.append('token',   pgToken.value);
-                        fd.append('to',      pgTo.value);
-                        fd.append('type',    pgType.value);
-                        fd.append('caption', pgCaption.value);
+                        fd.append('to',       pgTo.value);
+                        fd.append('caption',  pgCaption.value);
                         fd.append('filename', pgFilename.value || pgFile.value.name);
-                        fd.append('file',    pgFile.value);
-                        res = await fetch('playground-proxy.php', { method: 'POST', body: fd });
+                        fd.append('file',     pgFile.value);
+                        const uploadEndpoint = pgType.value === 'image' ? '/send/image' : '/send/file';
+                        res = await fetch(apiBase + uploadEndpoint, {
+                            method:  'POST',
+                            headers: { 'Authorization': 'Bearer ' + pgToken.value },
+                            // Do NOT set Content-Type — browser sets it with boundary for FormData
+                            body: fd
+                        });
                     } else {
-                        // JSON send via baileys-proxy.php
-                        const endpoint = pgType.value === 'text'  ? '/api/send/text'  :
-                                         pgType.value === 'image' ? '/api/send/image' : '/api/send/file';
+                        // JSON body — send directly to api.php/send/<type> with Bearer token
+                        const endpoint = pgType.value === 'text'  ? '/send/text'  :
+                                         pgType.value === 'image' ? '/send/image' : '/send/file';
                         const payload = { to: pgTo.value };
                         if (pgType.value === 'text') {
                             payload.message = pgMessage.value;
@@ -1214,7 +1222,7 @@ if (empty($_SESSION['user_id'])) {
                             payload.caption = pgCaption.value;
                             if (pgType.value === 'file') payload.filename = pgFilename.value;
                         }
-                        res = await fetch(API + '?path=' + endpoint, {
+                        res = await fetch(apiBase + endpoint, {
                             method:  'POST',
                             headers: {
                                 'Content-Type':  'application/json',

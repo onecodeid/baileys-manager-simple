@@ -2,12 +2,7 @@
 /**
  * api.php — Baileys Message REST API
  * ====================================
- * Sends text, image, and PDF via the Baileys Node.js service.
- * Authentication: Bearer token = session_id (the 32-char hex you see on the dashboard).
- *
- * ──────────────────────────────────────────────────────────────────────────────
- * ENDPOINTS
- * ──────────────────────────────────────────────────────────────────────────────
+ * PHP 7.4 compatible.
  *
  * POST /api.php/send/text
  *   Headers : Authorization: Bearer <session_token>
@@ -15,50 +10,27 @@
  *   Body    : { "to": "628123456789", "message": "Hello!" }
  *
  * POST /api.php/send/image
- *   Headers : Authorization: Bearer <session_token>
- *             Content-Type: multipart/form-data
- *   Fields  : to (required), caption (optional), file (image file, required)
- *   -- OR --
- *   Headers : Authorization: Bearer <session_token>
- *             Content-Type: application/json
- *   Body    : { "to": "628123456789", "caption": "Look!", "url": "https://..." }
+ *   multipart: to, caption (opt), file (image)
+ *   JSON     : { "to": "...", "caption": "...", "url": "https://..." }
  *
  * POST /api.php/send/file
- *   Headers : Authorization: Bearer <session_token>
- *             Content-Type: multipart/form-data
- *   Fields  : to (required), caption (optional), file (PDF or any file, required)
- *   -- OR --
- *   Headers : Authorization: Bearer <session_token>
- *             Content-Type: application/json
- *   Body    : { "to": "628123456789", "caption": "Invoice.pdf", "url": "https://...", "filename": "invoice.pdf" }
+ *   multipart: to, caption (opt), filename (opt), file
+ *   JSON     : { "to": "...", "caption": "...", "filename": "...", "url": "https://..." }
  *
  * GET /api.php/sessions
  *   Headers : Authorization: Bearer <session_token>
- *   Returns : status of the session matching the token
- *
- * ──────────────────────────────────────────────────────────────────────────────
- * RESPONSE (all endpoints)
- * ──────────────────────────────────────────────────────────────────────────────
- *   200 { "success": true,  "message_id": "...", ... }
- *   4xx { "success": false, "error": "..." }
- *   5xx { "success": false, "error": "..." }
  */
 
 // ── Config ────────────────────────────────────────────────────────────────────
 define('BAILEYS_BASE',    'http://127.0.0.1:3000');
 define('REQUEST_TIMEOUT', 20);
-define('UPLOAD_MAX_MB',   16);        // max upload size per file
+define('UPLOAD_MAX_MB',   16);
 
 require_once __DIR__ . '/db_config.php';
-
-// Upload temp dir inside the project (writable by web server)
-define('UPLOAD_TMP',  __DIR__ . '/s/uploads');
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 header('Content-Type: application/json');
 header('Cache-Control: no-store');
-
-// Allow CORS from same origin (adjust as needed)
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Headers: Authorization, Content-Type');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
@@ -88,9 +60,6 @@ function getDB(): PDO {
     return $pdo;
 }
 
-/**
- * Execute a cURL request to the Baileys Node.js service.
- */
 function baileysRequest(string $path, string $method = 'POST', array $curlOpts = []): array {
     $url = BAILEYS_BASE . $path;
     $ch  = curl_init($url);
@@ -102,7 +71,7 @@ function baileysRequest(string $path, string $method = 'POST', array $curlOpts =
     ], $curlOpts));
 
     $raw    = curl_exec($ch);
-    $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $err    = curl_error($ch);
     curl_close($ch);
 
@@ -117,34 +86,26 @@ function baileysRequest(string $path, string $method = 'POST', array $curlOpts =
     return $decoded;
 }
 
-/**
- * Normalise a WhatsApp number: strip leading + and append @s.whatsapp.net
- */
 function normaliseJid(string $to): string {
     $to = preg_replace('/\D/', '', $to);
     return $to . '@s.whatsapp.net';
 }
 
-/**
- * File to base64 data URI
- */
 function fileToDataUri(string $path, string $mime): string {
     return 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($path));
 }
 
 // ── Route parsing ─────────────────────────────────────────────────────────────
-// Support both PATH_INFO and ?route= fallback
-$pathInfo = $_SERVER['PATH_INFO'] ?? ($_GET['route'] ?? '');
+$pathInfo = isset($_SERVER['PATH_INFO']) ? $_SERVER['PATH_INFO'] : (isset($_GET['route']) ? $_GET['route'] : '');
 $pathInfo = '/' . trim($pathInfo, '/');
 $method   = $_SERVER['REQUEST_METHOD'];
 
 // ── Authentication ────────────────────────────────────────────────────────────
-$authHeader  = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+$authHeader   = isset($_SERVER['HTTP_AUTHORIZATION']) ? $_SERVER['HTTP_AUTHORIZATION'] : '';
 $sessionToken = '';
 if (preg_match('/^Bearer\s+(.+)$/i', $authHeader, $m)) {
     $sessionToken = trim($m[1]);
 }
-// Also accept ?token= for simple GET testing
 if ($sessionToken === '' && isset($_GET['token'])) {
     $sessionToken = trim($_GET['token']);
 }
@@ -153,7 +114,6 @@ if ($sessionToken === '') {
     fail(401, 'Missing Authorization header. Use: Authorization: Bearer <session_token>');
 }
 
-// Validate token exists in DB and is active
 try {
     $db   = getDB();
     $stmt = $db->prepare('SELECT name, status FROM whats_app_sessions WHERE name = :token LIMIT 1');
@@ -167,36 +127,34 @@ if (!$session) {
     fail(401, 'Invalid session token.');
 }
 
-// ── Routes ────────────────────────────────────────────────────────────────────
-
-// GET /api.php/sessions  — return this session info
+// ── GET /api.php/sessions ────────────────────────────────────────────────────
 if ($method === 'GET' && $pathInfo === '/sessions') {
     $res = baileysRequest('/api/session/status/' . urlencode($sessionToken));
     unset($res['__http_status']);
     respond(200, ['success' => true, 'session' => $res]);
 }
 
-// ── Shared: parse body ────────────────────────────────────────────────────────
-$contentType = strtolower($_SERVER['CONTENT_TYPE'] ?? '');
+// ── Parse body ────────────────────────────────────────────────────────────────
+$contentType = strtolower(isset($_SERVER['CONTENT_TYPE']) ? $_SERVER['CONTENT_TYPE'] : '');
 $isJson      = strpos($contentType, 'application/json') !== false;
 $isMultipart = strpos($contentType, 'multipart/form-data') !== false;
 
 if ($isJson) {
-    $body = json_decode(file_get_contents('php://input'), true) ?? [];
+    $body = json_decode(file_get_contents('php://input'), true);
+    if (!is_array($body)) $body = [];
 } else {
     $body = $_POST;
 }
 
 // ── POST /api.php/send/text ───────────────────────────────────────────────────
 if ($method === 'POST' && $pathInfo === '/send/text') {
+    $to      = trim(isset($body['to'])      ? $body['to']      : '');
+    $message = trim(isset($body['message']) ? $body['message'] : '');
 
-    $to      = trim($body['to']      ?? '');
-    $message = trim($body['message'] ?? '');
+    if ($to === '')      fail(400, '"to" is required.');
+    if ($message === '') fail(400, '"message" is required.');
 
-    if ($to === '')      fail(400, '"to" field is required (phone number, e.g. 628123456789).');
-    if ($message === '') fail(400, '"message" field is required.');
-
-    $jid = normaliseJid($to);
+    $jid     = normaliseJid($to);
     $payload = ['to' => $jid, 'message' => $message];
 
     $res = baileysRequest('/api/send-message', 'POST', [
@@ -209,40 +167,35 @@ if ($method === 'POST' && $pathInfo === '/send/text') {
 
     $httpStatus = $res['__http_status']; unset($res['__http_status']);
     if (isset($res['__curl_error'])) fail(502, 'Baileys unreachable: ' . $res['__curl_error']);
-    if ($httpStatus >= 400)          fail($httpStatus >= 500 ? 502 : 400, $res['error'] ?? 'Baileys error.');
+    if ($httpStatus >= 400)          fail($httpStatus >= 500 ? 502 : 400, isset($res['error']) ? $res['error'] : 'Baileys error.');
 
-    respond(200, ['success' => true, 'type' => 'text', 'to' => $jid] + $res);
+    respond(200, array_merge(['success' => true, 'type' => 'text', 'to' => $jid], $res));
 }
 
 // ── POST /api.php/send/image ──────────────────────────────────────────────────
 if ($method === 'POST' && $pathInfo === '/send/image') {
-
-    $to      = trim($body['to']      ?? '');
-    $caption = trim($body['caption'] ?? '');
-    if ($to === '') fail(400, '"to" field is required.');
+    $to      = trim(isset($body['to'])      ? $body['to']      : '');
+    $caption = trim(isset($body['caption']) ? $body['caption'] : '');
+    if ($to === '') fail(400, '"to" is required.');
 
     $jid = normaliseJid($to);
 
-    // Source: uploaded file  -OR-  URL in JSON body
     if ($isMultipart && isset($_FILES['file'])) {
-        // ── File upload ──────────────────────────────────────────────────
         $file = $_FILES['file'];
-        if ($file['error'] !== UPLOAD_ERR_OK) fail(400, 'Upload error code: ' . $file['error']);
-        if ($file['size'] > UPLOAD_MAX_MB * 1024 * 1024) fail(413, 'File too large (max ' . UPLOAD_MAX_MB . ' MB).');
+        if ($file['error'] !== UPLOAD_ERR_OK)                       fail(400, 'Upload error code: ' . $file['error']);
+        if ($file['size'] > UPLOAD_MAX_MB * 1024 * 1024)            fail(413, 'File too large (max ' . UPLOAD_MAX_MB . ' MB).');
 
         $mime = mime_content_type($file['tmp_name']);
-        if (!str_starts_with($mime, 'image/')) fail(415, 'File must be an image (got: ' . $mime . ').');
-
-        $dataUri = fileToDataUri($file['tmp_name'], $mime);
+        // PHP 7.4 compatible: use strpos instead of str_starts_with
+        if (strpos($mime, 'image/') !== 0)                           fail(415, 'File must be an image (got: ' . $mime . ').');
 
         $payload = [
             'to'      => $jid,
             'caption' => $caption,
-            'media'   => $dataUri,
+            'media'   => fileToDataUri($file['tmp_name'], $mime),
             'type'    => 'image',
         ];
     } elseif (isset($body['url'])) {
-        // ── Remote URL ───────────────────────────────────────────────────
         $payload = [
             'to'      => $jid,
             'caption' => $caption,
@@ -263,45 +216,40 @@ if ($method === 'POST' && $pathInfo === '/send/image') {
 
     $httpStatus = $res['__http_status']; unset($res['__http_status']);
     if (isset($res['__curl_error'])) fail(502, 'Baileys unreachable: ' . $res['__curl_error']);
-    if ($httpStatus >= 400)          fail($httpStatus >= 500 ? 502 : 400, $res['error'] ?? 'Baileys error.');
+    if ($httpStatus >= 400)          fail($httpStatus >= 500 ? 502 : 400, isset($res['error']) ? $res['error'] : 'Baileys error.');
 
-    respond(200, ['success' => true, 'type' => 'image', 'to' => $jid] + $res);
+    respond(200, array_merge(['success' => true, 'type' => 'image', 'to' => $jid], $res));
 }
 
 // ── POST /api.php/send/file ───────────────────────────────────────────────────
 if ($method === 'POST' && $pathInfo === '/send/file') {
-
-    $to       = trim($body['to']       ?? '');
-    $caption  = trim($body['caption']  ?? '');
-    $filename = trim($body['filename'] ?? '');
-    if ($to === '') fail(400, '"to" field is required.');
+    $to       = trim(isset($body['to'])       ? $body['to']       : '');
+    $caption  = trim(isset($body['caption'])  ? $body['caption']  : '');
+    $filename = trim(isset($body['filename']) ? $body['filename'] : '');
+    if ($to === '') fail(400, '"to" is required.');
 
     $jid = normaliseJid($to);
 
     if ($isMultipart && isset($_FILES['file'])) {
-        // ── File upload ──────────────────────────────────────────────────
         $file = $_FILES['file'];
-        if ($file['error'] !== UPLOAD_ERR_OK) fail(400, 'Upload error code: ' . $file['error']);
+        if ($file['error'] !== UPLOAD_ERR_OK)            fail(400, 'Upload error code: ' . $file['error']);
         if ($file['size'] > UPLOAD_MAX_MB * 1024 * 1024) fail(413, 'File too large (max ' . UPLOAD_MAX_MB . ' MB).');
 
         $mime            = mime_content_type($file['tmp_name']);
-        $originalName    = $file['name'];
-        $displayFilename = $filename !== '' ? $filename : $originalName;
-        $dataUri         = fileToDataUri($file['tmp_name'], $mime);
+        $displayFilename = $filename !== '' ? $filename : $file['name'];
 
         $payload = [
             'to'       => $jid,
-            'caption'  => $caption ?: $displayFilename,
+            'caption'  => $caption !== '' ? $caption : $displayFilename,
             'filename' => $displayFilename,
-            'media'    => $dataUri,
+            'media'    => fileToDataUri($file['tmp_name'], $mime),
             'type'     => 'document',
         ];
     } elseif (isset($body['url'])) {
-        // ── Remote URL ───────────────────────────────────────────────────
         $displayFilename = $filename !== '' ? $filename : basename(parse_url($body['url'], PHP_URL_PATH));
         $payload = [
             'to'       => $jid,
-            'caption'  => $caption ?: $displayFilename,
+            'caption'  => $caption !== '' ? $caption : $displayFilename,
             'filename' => $displayFilename,
             'url'      => $body['url'],
             'type'     => 'document',
@@ -320,10 +268,10 @@ if ($method === 'POST' && $pathInfo === '/send/file') {
 
     $httpStatus = $res['__http_status']; unset($res['__http_status']);
     if (isset($res['__curl_error'])) fail(502, 'Baileys unreachable: ' . $res['__curl_error']);
-    if ($httpStatus >= 400)          fail($httpStatus >= 500 ? 502 : 400, $res['error'] ?? 'Baileys error.');
+    if ($httpStatus >= 400)          fail($httpStatus >= 500 ? 502 : 400, isset($res['error']) ? $res['error'] : 'Baileys error.');
 
-    respond(200, ['success' => true, 'type' => 'document', 'to' => $jid, 'filename' => $payload['filename']] + $res);
+    respond(200, array_merge(['success' => true, 'type' => 'document', 'to' => $jid, 'filename' => $payload['filename']], $res));
 }
 
 // ── 404 ───────────────────────────────────────────────────────────────────────
-fail(404, "Unknown route: [{$method}] {$pathInfo}. See API docs.");
+fail(404, 'Unknown route: [' . $method . '] ' . $pathInfo . '. Available: /send/text, /send/image, /send/file, /sessions');
