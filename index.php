@@ -1159,8 +1159,15 @@ if (empty($_SESSION['user_id'])) {
             const pgLoading   = ref(false);
             const pgLogs      = ref([]);
 
+            // Vuetify 3 v-file-input returns a File[] array, so always read index [0]
+            const pgFileObj = computed(() => {
+                if (!pgFile.value) return null;
+                return Array.isArray(pgFile.value) ? pgFile.value[0] : pgFile.value;
+            });
+
             // Watch file selection to generate image preview
-            watch(pgFile, (f) => {
+            watch(pgFile, () => {
+                const f = pgFileObj.value;
                 if (f && pgType.value === 'image') {
                     const reader = new FileReader();
                     reader.onload = e => { pgFilePreview.value = e.target.result; };
@@ -1193,16 +1200,18 @@ if (empty($_SESSION['user_id'])) {
                     const useUpload = (pgType.value === 'image' && pgImageMode.value === 'upload') ||
                                       (pgType.value === 'file'  && pgFileMode.value  === 'upload');
 
+                    // Get the actual File object (Vuetify 3 returns array)
+                    const actualFile = pgFileObj.value;
+
                     let res;
 
-                    if (useUpload && pgFile.value) {
+                    if (useUpload && actualFile) {
                         // multipart upload — send directly to api.php/send/<type> with Bearer token
-                        // api.php handles the file itself (base64 encode, forward to Baileys)
                         const fd = new FormData();
                         fd.append('to',       pgTo.value);
                         fd.append('caption',  pgCaption.value);
-                        fd.append('filename', pgFilename.value || pgFile.value.name);
-                        fd.append('file',     pgFile.value);
+                        fd.append('filename', pgFilename.value || actualFile.name);
+                        fd.append('file',     actualFile);
                         const uploadEndpoint = pgType.value === 'image' ? '/send/image' : '/send/file';
                         res = await fetch(apiBase + uploadEndpoint, {
                             method:  'POST',
@@ -1281,7 +1290,7 @@ if (empty($_SESSION['user_id'])) {
                 statusColor, statusIcon,
                 pgToken, pgTo, pgType, pgImageMode, pgFileMode,
                 pgMessage, pgMediaUrl, pgCaption, pgFilename,
-                pgFile, pgFilePreview, pgLoading, pgLogs, pgSend
+                pgFile, pgFileObj, pgFilePreview, pgLoading, pgLogs, pgSend
             };
         }
     });
