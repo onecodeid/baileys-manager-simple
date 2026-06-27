@@ -249,6 +249,9 @@ if (empty($_SESSION['user_id'])) {
         <v-tab value="playground" prepend-icon="mdi-flask-outline">
           Playground
         </v-tab>
+        <v-tab value="profile" prepend-icon="mdi-account-cog">
+          My Profile
+        </v-tab>
       </v-tabs>
 
       <!-- Tabs Windows -->
@@ -785,6 +788,96 @@ if (empty($_SESSION['user_id'])) {
           </v-row>
         </v-window-item>
 
+        <!-- Tab 4: My Profile -->
+        <v-window-item value="profile">
+          <v-row justify="center">
+            <v-col cols="12" sm="10" md="7" lg="5">
+
+              <!-- Change Name -->
+              <v-card class="rounded-lg mb-5" elevation="2">
+                <v-card-title class="pa-4 text-subtitle-1 font-weight-bold">
+                  <v-icon icon="mdi-account-edit" class="mr-2" color="green-darken-2"></v-icon>
+                  Change Name
+                </v-card-title>
+                <v-divider></v-divider>
+                <v-card-text class="pa-5">
+                  <v-alert v-if="profileNameMsg.text" :type="profileNameMsg.type" variant="tonal" density="compact" class="mb-4 text-caption" closable @click:close="profileNameMsg.text=''">
+                    {{ profileNameMsg.text }}
+                  </v-alert>
+                  <v-text-field
+                    v-model="profileName"
+                    label="Display Name"
+                    variant="outlined"
+                    density="compact"
+                    prepend-inner-icon="mdi-account"
+                    class="mb-1"
+                  ></v-text-field>
+                  <div class="text-caption text-grey mb-4">Currently signed in as <strong>{{ authUser.email }}</strong></div>
+                  <v-btn color="green-darken-2" variant="flat" block :loading="profileNameLoading" :disabled="!profileName || profileName === authUser.name" @click="saveName">
+                    Update Name
+                  </v-btn>
+                </v-card-text>
+              </v-card>
+
+              <!-- Change Password -->
+              <v-card class="rounded-lg" elevation="2">
+                <v-card-title class="pa-4 text-subtitle-1 font-weight-bold">
+                  <v-icon icon="mdi-lock-reset" class="mr-2" color="orange-darken-2"></v-icon>
+                  Change Password
+                </v-card-title>
+                <v-divider></v-divider>
+                <v-card-text class="pa-5">
+                  <v-alert v-if="profilePwMsg.text" :type="profilePwMsg.type" variant="tonal" density="compact" class="mb-4 text-caption" closable @click:close="profilePwMsg.text=''">
+                    {{ profilePwMsg.text }}
+                  </v-alert>
+                  <v-text-field
+                    v-model="profileCurrentPw"
+                    label="Current Password"
+                    :type="showCurrentPw ? 'text' : 'password'"
+                    variant="outlined"
+                    density="compact"
+                    prepend-inner-icon="mdi-lock"
+                    :append-inner-icon="showCurrentPw ? 'mdi-eye-off' : 'mdi-eye'"
+                    @click:append-inner="showCurrentPw = !showCurrentPw"
+                    class="mb-3"
+                  ></v-text-field>
+                  <v-text-field
+                    v-model="profileNewPw"
+                    label="New Password"
+                    :type="showNewPw ? 'text' : 'password'"
+                    variant="outlined"
+                    density="compact"
+                    prepend-inner-icon="mdi-lock-plus"
+                    :append-inner-icon="showNewPw ? 'mdi-eye-off' : 'mdi-eye'"
+                    @click:append-inner="showNewPw = !showNewPw"
+                    class="mb-3"
+                    hint="Minimum 6 characters"
+                    persistent-hint
+                  ></v-text-field>
+                  <v-text-field
+                    v-model="profileConfirmPw"
+                    label="Confirm New Password"
+                    :type="showConfirmPw ? 'text' : 'password'"
+                    variant="outlined"
+                    density="compact"
+                    prepend-inner-icon="mdi-lock-check"
+                    :append-inner-icon="showConfirmPw ? 'mdi-eye-off' : 'mdi-eye'"
+                    @click:append-inner="showConfirmPw = !showConfirmPw"
+                    :error-messages="profileConfirmPw && profileNewPw !== profileConfirmPw ? ['Passwords do not match'] : []"
+                    class="mb-4"
+                  ></v-text-field>
+                  <v-btn color="orange-darken-2" variant="flat" block :loading="profilePwLoading"
+                    :disabled="!profileCurrentPw || !profileNewPw || profileNewPw !== profileConfirmPw || profileNewPw.length < 6"
+                    @click="savePassword">
+                    Update Password
+                  </v-btn>
+                </v-card-text>
+              </v-card>
+
+            </v-col>
+          </v-row>
+        </v-window-item>
+
       </v-window>
 
     </v-container>
@@ -1268,6 +1361,68 @@ if (empty($_SESSION['user_id'])) {
                 }
             }, { immediate: true });
 
+            // ── Profile ────────────────────────────────────────────────────────
+            const profileName        = ref(window.__authUser ? window.__authUser.name : '');
+            const profileNameLoading = ref(false);
+            const profileNameMsg     = ref({ text: '', type: 'success' });
+
+            const profileCurrentPw  = ref('');
+            const profileNewPw      = ref('');
+            const profileConfirmPw  = ref('');
+            const profilePwLoading  = ref(false);
+            const profilePwMsg      = ref({ text: '', type: 'success' });
+            const showCurrentPw     = ref(false);
+            const showNewPw         = ref(false);
+            const showConfirmPw     = ref(false);
+
+            const saveName = async () => {
+                profileNameLoading.value = true;
+                profileNameMsg.value     = { text: '', type: 'success' };
+                try {
+                    const res  = await fetch('auth.php', {
+                        method:  'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body:    JSON.stringify({ action: 'update_name', name: profileName.value })
+                    });
+                    const data = await res.json();
+                    if (!res.ok || data.error) throw new Error(data.error || 'Failed to update name.');
+                    authUser.value.name = profileName.value;
+                    profileNameMsg.value = { text: 'Name updated successfully!', type: 'success' };
+                    store.commit('SHOW_SNACK', { text: 'Name updated!', color: 'success' });
+                } catch (e) {
+                    profileNameMsg.value = { text: e.message, type: 'error' };
+                } finally {
+                    profileNameLoading.value = false;
+                }
+            };
+
+            const savePassword = async () => {
+                profilePwLoading.value = true;
+                profilePwMsg.value     = { text: '', type: 'success' };
+                try {
+                    const res  = await fetch('auth.php', {
+                        method:  'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body:    JSON.stringify({
+                            action:           'update_password',
+                            current_password: profileCurrentPw.value,
+                            new_password:     profileNewPw.value
+                        })
+                    });
+                    const data = await res.json();
+                    if (!res.ok || data.error) throw new Error(data.error || 'Failed to update password.');
+                    profileCurrentPw.value = '';
+                    profileNewPw.value     = '';
+                    profileConfirmPw.value = '';
+                    profilePwMsg.value = { text: 'Password updated successfully!', type: 'success' };
+                    store.commit('SHOW_SNACK', { text: 'Password updated!', color: 'success' });
+                } catch (e) {
+                    profilePwMsg.value = { text: e.message, type: 'error' };
+                } finally {
+                    profilePwLoading.value = false;
+                }
+            };
+
             onMounted(() => store.dispatch('loadSessions'));
             onUnmounted(() => store.dispatch('stopAllPolling'));
 
@@ -1290,7 +1445,11 @@ if (empty($_SESSION['user_id'])) {
                 statusColor, statusIcon,
                 pgToken, pgTo, pgType, pgImageMode, pgFileMode,
                 pgMessage, pgMediaUrl, pgCaption, pgFilename,
-                pgFile, pgFileObj, pgFilePreview, pgLoading, pgLogs, pgSend
+                pgFile, pgFileObj, pgFilePreview, pgLoading, pgLogs, pgSend,
+                profileName, profileNameLoading, profileNameMsg, saveName,
+                profileCurrentPw, profileNewPw, profileConfirmPw,
+                profilePwLoading, profilePwMsg,
+                showCurrentPw, showNewPw, showConfirmPw, savePassword
             };
         }
     });
